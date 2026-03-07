@@ -14,7 +14,7 @@ from telegram.ext import (
 
 from bot.config import TELEGRAM_BOT_TOKEN
 from bot.database import init_db, close_db
-from bot.handlers import bus, favorites, inline, location, metro, planner, routes, start
+from bot.handlers import bus, favorites, inline, location, metro, routes, start
 from bot.services.metro import download_gtfs
 
 logging.basicConfig(
@@ -48,8 +48,6 @@ async def handle_text(update: Update, context) -> None:
         return
 
     # Check if any handler is awaiting input
-    if await planner.handle_route_text_input(update, context):
-        return
     if await routes.handle_route_text_input(update, context):
         return
     if await bus.handle_bus_text_input(update, context):
@@ -179,7 +177,7 @@ def main() -> None:
     app.add_handler(CommandHandler("station", metro.station_command))
     app.add_handler(CommandHandler("favorites", favorites.favorites_command))
     app.add_handler(CommandHandler("fav", favorites.fav_quick_command))
-    app.add_handler(CommandHandler("route", planner.route_command))
+    app.add_handler(CommandHandler("route", routes.route_command))
 
     # Callback query handlers - menu navigation
     app.add_handler(CallbackQueryHandler(start.main_menu_callback, pattern=r"^menu:main$"))
@@ -210,7 +208,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(metro.metro_station_lines_callback, pattern=r"^metro:station_lines:.+$"))
 
     # Route planning callbacks
-    app.add_handler(CallbackQueryHandler(planner.route_callback, pattern=r"^plan:route$"))
+    app.add_handler(CallbackQueryHandler(routes.route_plan_callback, pattern=r"^plan:route$"))
     app.add_handler(CallbackQueryHandler(routes.route_plan_callback, pattern=r"^route:plan$"))
 
     # Favorites callbacks
