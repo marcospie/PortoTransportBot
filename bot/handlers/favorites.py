@@ -1,46 +1,27 @@
-"""Favorites management handlers."""
+"""Favorites management handlers.
 
-import json
+Uses the database layer (bot.database) which transparently falls back to
+JSON file storage when DATABASE_URL is not configured.
+"""
+
 import logging
-from pathlib import Path
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.config import DATA_DIR
-from bot.keyboards.inline import favorites_keyboard
+from bot.database import add_favorite, remove_favorite, get_favorites, is_favorite
+from bot.keyboards.inline import favorites_keyboard, bus_stop_actions_keyboard
+from bot.handlers.start import _clear_awaiting
 from bot.utils.formatting import escape_md
 
 logger = logging.getLogger(__name__)
-
-FAVORITES_DIR = DATA_DIR / "favorites"
-
-
-def _get_favorites_path(user_id: int) -> Path:
-    FAVORITES_DIR.mkdir(parents=True, exist_ok=True)
-    return FAVORITES_DIR / f"{user_id}.json"
-
-
-def _load_favorites(user_id: int) -> list[dict]:
-    path = _get_favorites_path(user_id)
-    if not path.exists():
-        return []
-    try:
-        return json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError):
-        return []
-
-
-def _save_favorites(user_id: int, favorites: list[dict]) -> None:
-    path = _get_favorites_path(user_id)
-    path.write_text(json.dumps(favorites, ensure_ascii=False, indent=2))
 
 
 async def favorites_command(update: Update,
                              context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /favorites command."""
     user_id = update.effective_user.id
-    favs = _load_favorites(user_id)
+    favs = await get_favorites(user_id)
 
     if not favs:
         text = (
@@ -64,9 +45,10 @@ async def favorites_callback(update: Update,
     """Show favorites menu via callback."""
     query = update.callback_query
     await query.answer()
+    _clear_awaiting(context)
 
     user_id = update.effective_user.id
-    favs = _load_favorites(user_id)
+    favs = await get_favorites(user_id)
 
     if not favs:
         text = (
@@ -100,10 +82,8 @@ async def add_favorite_callback(update: Update,
     fav_type = parts[2]  # bus or metro
     fav_id = parts[3]    # stop_id or station_name
 
-    favs = _load_favorites(user_id)
-
     # Check if already favorited
-    if any(f["type"] == fav_type and f["id"] == fav_id for f in favs):
+    if await is_favorite(user_id, fav_type, fav_id):
         await query.answer("Já está nos favoritos! ⭐")
         return
 
@@ -115,12 +95,7 @@ async def add_favorite_callback(update: Update,
     else:
         name = fav_id
 
-    favs.append({
-        "type": fav_type,
-        "id": fav_id,
-        "name": name,
-    })
-    _save_favorites(user_id, favs)
+    await add_favorite(user_id, fav_type, fav_id, name)
 
     await query.answer(f"Adicionado aos favoritos! ⭐ {name}")
 
@@ -139,13 +114,12 @@ async def remove_favorite_callback(update: Update,
     fav_type = parts[2]
     fav_id = parts[3]
 
-    favs = _load_favorites(user_id)
-    favs = [f for f in favs if not (f["type"] == fav_type and f["id"] == fav_id)]
-    _save_favorites(user_id, favs)
+    await remove_favorite(user_id, fav_type, fav_id)
 
     await query.answer("Removido dos favoritos ❌")
 
     # Refresh the favorites list
+    favs = await get_favorites(user_id)
     if not favs:
         text = (
             "⭐ *Os teus favoritos*\n\n"
@@ -161,3 +135,26 @@ async def remove_favorite_callback(update: Update,
         parse_mode="MarkdownV2",
         reply_markup=favorites_keyboard(favs),
     )
+
+
+async def fav_quick_command(update: Update,
+                             context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /fav command - show first favorite's real-time data."""
+    user_id = update.effective_user.id
+    favs = await get_favorites(user_id)
+
+    if not favs:
+        await update.message.reply_text(
+            "⭐ Ainda não tens favoritos\\.\n"
+            "Pesquisa uma paragem e usa o botão ⭐ para adicionar\\.",
+            parse_mode="MarkdownV2",
+        )
+        return
+
+    fav = favs[0]
+    if fav["type"] == "bus":
+        from bot.handlers.bus import _send_stop_realtime
+        await _send_stop_realtime(update.message, fav["id"], context)
+    else:
+        from bot.handlers.metro import _search_and_show_stations
+        await _search_and_show_stations(update.message, fav["id"], context)

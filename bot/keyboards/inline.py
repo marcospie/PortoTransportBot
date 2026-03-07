@@ -24,10 +24,25 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
 
 def bus_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔍 Pesquisar paragem", callback_data="bus:search")],
-        [InlineKeyboardButton("📍 Paragem por código", callback_data="bus:code")],
+        [InlineKeyboardButton("🔍 Encontrar paragem", callback_data="bus:find")],
         [InlineKeyboardButton("🚌 Ver linhas", callback_data="bus:routes")],
         [InlineKeyboardButton("🔙 Menu principal", callback_data="menu:main")],
+    ])
+
+
+def cancel_keyboard(back_to: str = "menu:bus") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Cancelar", callback_data=back_to)],
+    ])
+
+
+def onboarding_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📍 Paragens perto de mim", callback_data="onboard:location")],
+        [
+            InlineKeyboardButton("🔍 Pesquisar paragem", callback_data="bus:find"),
+            InlineKeyboardButton("🔍 Pesquisar estação", callback_data="metro:search"),
+        ],
     ])
 
 
@@ -154,8 +169,8 @@ def metro_line_actions_keyboard(line_code: str) -> InlineKeyboardMarkup:
 def favorites_keyboard(favorites: list[dict]) -> InlineKeyboardMarkup:
     if not favorites:
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("🚌 Ir a autocarros", callback_data="menu:bus")],
-            [InlineKeyboardButton("🚇 Ir ao metro", callback_data="menu:metro")],
+            [InlineKeyboardButton("🔍 Encontrar uma paragem", callback_data="bus:find")],
+            [InlineKeyboardButton("🔍 Encontrar uma estação", callback_data="metro:search")],
             [InlineKeyboardButton("🔙 Menu principal", callback_data="menu:main")],
         ])
 

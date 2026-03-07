@@ -1,8 +1,9 @@
 """Bus (STCP) related handlers."""
 
 import logging
+from datetime import datetime
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from bot.keyboards.inline import (
@@ -10,14 +11,18 @@ from bot.keyboards.inline import (
     bus_stop_actions_keyboard,
     bus_stop_results_keyboard,
     bus_routes_keyboard,
+    cancel_keyboard,
 )
+from bot.handlers.start import _clear_awaiting
 from bot.services import stcp
 from bot.utils.formatting import escape_md, format_bus_arrivals
 from bot.utils.i18n import get_zone_display
 
 logger = logging.getLogger(__name__)
 
-# Conversation state keys
+# Conversation state keys (unified)
+AWAITING_BUS_FIND = "awaiting_bus_find"
+# Legacy keys kept for cleanup
 AWAITING_BUS_SEARCH = "awaiting_bus_search"
 AWAITING_BUS_CODE = "awaiting_bus_code"
 
@@ -41,7 +46,7 @@ async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     stop_id = context.args[0].upper()
-    await _send_stop_realtime(update.message, stop_id)
+    await _send_stop_realtime(update.message, stop_id, context)
 
 
 async def bus_menu_callback(update: Update,
@@ -49,6 +54,8 @@ async def bus_menu_callback(update: Update,
     """Show bus menu."""
     query = update.callback_query
     await query.answer()
+    _clear_awaiting(context)
+    context.user_data.pop("bus_routes", None)
     await query.edit_message_text(
         "🚌 *Autocarros STCP*\n\nEscolhe uma opção:",
         parse_mode="MarkdownV2",
@@ -56,32 +63,34 @@ async def bus_menu_callback(update: Update,
     )
 
 
-async def bus_search_callback(update: Update,
-                               context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Prompt user to enter stop name for search."""
+async def bus_find_callback(update: Update,
+                             context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Prompt user to enter stop name or code (unified find)."""
     query = update.callback_query
     await query.answer()
-    context.user_data[AWAITING_BUS_SEARCH] = True
+    context.user_data[AWAITING_BUS_FIND] = datetime.now()
+    # Clean up legacy keys
+    context.user_data.pop(AWAITING_BUS_SEARCH, None)
     context.user_data.pop(AWAITING_BUS_CODE, None)
     await query.edit_message_text(
-        "🔍 *Pesquisar paragem*\n\nEnvia o nome da paragem que procuras\\.\n"
-        "Exemplo: `Bolhão`, `Casa da Música`, `Aliados`",
+        "🔍 *Encontrar paragem*\n\nEnvia o nome ou código da paragem:\n"
+        "Exemplo: `Bolhão`, `BCM2`, `Casa da Música`",
         parse_mode="MarkdownV2",
+        reply_markup=cancel_keyboard(),
     )
+
+
+# Backwards compatibility aliases
+async def bus_search_callback(update: Update,
+                               context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Legacy handler - redirects to bus_find_callback."""
+    await bus_find_callback(update, context)
 
 
 async def bus_code_callback(update: Update,
                              context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Prompt user to enter stop code."""
-    query = update.callback_query
-    await query.answer()
-    context.user_data[AWAITING_BUS_CODE] = True
-    context.user_data.pop(AWAITING_BUS_SEARCH, None)
-    await query.edit_message_text(
-        "📍 *Paragem por código*\n\nEnvia o código da paragem\\.\n"
-        "Exemplo: `BCM2`, `ALID1`, `TRIN2`",
-        parse_mode="MarkdownV2",
-    )
+    """Legacy handler - redirects to bus_find_callback."""
+    await bus_find_callback(update, context)
 
 
 async def bus_routes_callback(update: Update,
@@ -146,6 +155,15 @@ async def bus_stop_callback(update: Update,
             parse_mode="MarkdownV2",
             reply_markup=bus_stop_actions_keyboard(stop_id),
         )
+
+        # Onboarding tip for first-time users
+        if not context.user_data.get("onboarded"):
+            context.user_data["onboarded"] = True
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="💡 *Dica:* Podes escrever o nome ou código de qualquer paragem diretamente no chat, sem usar o menu\\!",
+                parse_mode="MarkdownV2",
+            )
     except Exception:
         logger.exception("Error in bus_stop_callback for %s", stop_id)
         await query.edit_message_text(
@@ -232,7 +250,6 @@ async def bus_route_callback(update: Update,
             lines.append(f"🔴 {escape_md(stops[-1]['name'])} \\(`{escape_md(stops[-1]['stop_id'])}`\\)")
             text = "\n".join(lines)
 
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         await query.edit_message_text(
             text,
             parse_mode="MarkdownV2",
@@ -251,24 +268,47 @@ async def bus_route_callback(update: Update,
 
 async def handle_bus_text_input(update: Update,
                                  context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Handle text input for bus search/code. Returns True if handled."""
+    """Handle text input for bus find (unified search/code). Returns True if handled."""
     text = update.message.text.strip()
 
-    if context.user_data.get(AWAITING_BUS_SEARCH):
+    # Check unified state first, then legacy states
+    ts = context.user_data.get(AWAITING_BUS_FIND)
+    ts_search = context.user_data.get(AWAITING_BUS_SEARCH)
+    ts_code = context.user_data.get(AWAITING_BUS_CODE)
+
+    # Check if any flag is active and not expired (5 min timeout)
+    is_awaiting = False
+    for flag_ts in (ts, ts_search, ts_code):
+        if flag_ts is True:
+            is_awaiting = True
+            break
+        if isinstance(flag_ts, datetime) and (datetime.now() - flag_ts).total_seconds() < 300:
+            is_awaiting = True
+            break
+
+    if not is_awaiting:
+        # Clear any expired flags
+        context.user_data.pop(AWAITING_BUS_FIND, None)
         context.user_data.pop(AWAITING_BUS_SEARCH, None)
-        await _search_and_show_stops(update.message, text)
-        return True
-
-    if context.user_data.get(AWAITING_BUS_CODE):
         context.user_data.pop(AWAITING_BUS_CODE, None)
+        return False
+
+    # Clear all awaiting flags
+    context.user_data.pop(AWAITING_BUS_FIND, None)
+    context.user_data.pop(AWAITING_BUS_SEARCH, None)
+    context.user_data.pop(AWAITING_BUS_CODE, None)
+
+    # Auto-detect: if short text with digits, treat as stop code
+    if len(text) <= 6 and any(c.isdigit() for c in text):
         stop_id = text.upper()
-        await _send_stop_realtime(update.message, stop_id)
-        return True
+        await _send_stop_realtime(update.message, stop_id, context)
+    else:
+        await _search_and_show_stops(update.message, text, context)
 
-    return False
+    return True
 
 
-async def _search_and_show_stops(message, query: str) -> None:
+async def _search_and_show_stops(message, query: str, context=None) -> None:
     """Search for stops and show results."""
     stops = await stcp.search_stops(query)
 
@@ -297,6 +337,7 @@ async def bus_location_callback(update: Update,
 
     stop_id = query.data.split(":")[-1]
     try:
+        await query.edit_message_reply_markup(reply_markup=None)
         info = await stcp.get_stop_info(stop_id)
         lat = info.get("lat")
         lon = info.get("lon")
@@ -327,7 +368,7 @@ async def bus_location_callback(update: Update,
         )
 
 
-async def _send_stop_realtime(message, stop_id: str) -> None:
+async def _send_stop_realtime(message, stop_id: str, context=None) -> None:
     """Fetch and send real-time data for a stop."""
     data = await stcp.get_stop_real_time(stop_id)
 
@@ -346,3 +387,11 @@ async def _send_stop_realtime(message, stop_id: str) -> None:
         parse_mode="MarkdownV2",
         reply_markup=bus_stop_actions_keyboard(stop_id),
     )
+
+    # Onboarding tip for first-time users
+    if context and not context.user_data.get("onboarded"):
+        context.user_data["onboarded"] = True
+        await message.reply_text(
+            "💡 *Dica:* Podes escrever o nome ou código de qualquer paragem diretamente no chat, sem usar o menu\\!",
+            parse_mode="MarkdownV2",
+        )

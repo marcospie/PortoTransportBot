@@ -31,10 +31,10 @@ class TestBusMenuKeyboard:
         kb = bus_menu_keyboard()
         assert isinstance(kb, InlineKeyboardMarkup)
 
-    def test_has_search_option(self):
+    def test_has_find_option(self):
         kb = bus_menu_keyboard()
         all_data = [btn.callback_data for row in kb.inline_keyboard for btn in row]
-        assert "bus:search" in all_data
+        assert "bus:find" in all_data
 
     def test_has_back_button(self):
         kb = bus_menu_keyboard()

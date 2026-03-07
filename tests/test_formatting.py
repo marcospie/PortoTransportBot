@@ -44,23 +44,61 @@ class TestFormatBusArrivals:
         assert "BCM2" in result
         assert "Boavista" in result
         assert "Sem autocarros" in result
+        assert "━━━━" in result
 
     def test_with_arrivals(self):
         arrivals = [
-            {"line": "204", "destination": "Hosp. S. João", "time": "3 minutos"},
-            {"line": "508", "destination": "Casa da Música", "time": "6 minutos"},
+            {"line": "204", "destination": "Hosp. S. João", "time": "3 minutos", "minutes": 3},
+            {"line": "508", "destination": "Casa da Música", "time": "6 minutos", "minutes": 6},
         ]
         result = format_bus_arrivals("BCM2", "Boavista", arrivals)
         assert "BCM2" in result
         assert "204" in result
         assert "508" in result
-        assert "Próximas passagens" in result
+        assert "Atualizado" in result
 
     def test_arrival_contains_stop_name(self):
         result = format_bus_arrivals("TEST1", "Test Stop", [
-            {"line": "1", "destination": "Dest", "time": "5 min"},
+            {"line": "1", "destination": "Dest", "time": "5 min", "minutes": 5},
         ])
         assert "Test Stop" in result
+
+    def test_urgency_grouping(self):
+        arrivals = [
+            {"line": "204", "destination": "Marquês", "time": "2 minutos", "minutes": 2},
+            {"line": "300", "destination": "Campainha", "time": "8 minutos", "minutes": 8},
+        ]
+        result = format_bus_arrivals("BCM2", "Bolhao", arrivals)
+        assert "A chegar" in result
+        assert "Seguintes" in result
+
+    def test_no_urgency_split_when_all_same_group(self):
+        arrivals = [
+            {"line": "204", "destination": "Marquês", "time": "8 minutos", "minutes": 8},
+            {"line": "300", "destination": "Campainha", "time": "12 minutos", "minutes": 12},
+        ]
+        result = format_bus_arrivals("BCM2", "Bolhao", arrivals)
+        assert "A chegar:" not in result
+        assert "Seguintes:" not in result
+
+    def test_status_emoji_preserved(self):
+        arrivals = [
+            {"line": "204", "destination": "Marquês", "time": "✅ 3 minutos", "minutes": 3},
+        ]
+        result = format_bus_arrivals("BCM2", "Bolhao", arrivals)
+        assert "✅" in result
+
+    def test_compact_single_line_format(self):
+        arrivals = [
+            {"line": "204", "destination": "Marquês", "time": "8 minutos", "minutes": 8},
+        ]
+        result = format_bus_arrivals("BCM2", "Bolhao", arrivals)
+        # Each arrival should be on a single line with dash separator
+        assert "—" in result
+        # Should NOT have per-row bus emoji
+        assert "🚌" not in result
+        # Should NOT have per-row timer emoji
+        assert "⏱" not in result
 
 
 class TestFormatMetroSchedule:
@@ -68,6 +106,7 @@ class TestFormatMetroSchedule:
         result = format_metro_schedule("Trindade", "🔵 Linha A", [])
         assert "Trindade" in result
         assert "Sem informação" in result
+        assert "━━━━" in result
 
     def test_with_departures(self):
         deps = [
@@ -76,7 +115,25 @@ class TestFormatMetroSchedule:
         ]
         result = format_metro_schedule("Trindade", "🔵 Linha A", deps)
         assert "Trindade" in result
-        assert "Próximas partidas" in result
+        assert "Atualizado" in result
+
+    def test_estimated_departures_label(self):
+        deps = [
+            {"direction": "Senhor de Matosinhos", "time": "~15:30", "estimated": True},
+        ]
+        result = format_metro_schedule("Trindade", "🔵 Linha A", deps)
+        assert "Estimativa" in result
+
+    def test_compact_single_line_format(self):
+        deps = [
+            {"direction": "Senhor de Matosinhos", "time": "~15:30"},
+        ]
+        result = format_metro_schedule("Trindade", "🔵 Linha A", deps)
+        # Each departure on single line with dash separator
+        assert "—" in result
+        # Should NOT have per-row emoji
+        assert "🚃" not in result
+        assert "⏱" not in result
 
 
 class TestFormatRouteInfo:
@@ -87,6 +144,12 @@ class TestFormatRouteInfo:
         assert "Stop A" in result
         assert "Stop C" in result
 
+    def test_stops_use_monospace(self):
+        stops = ["Stop A", "Stop B"]
+        result = format_route_info("204", "Direction", stops)
+        # Stops should be wrapped in backticks for monospace
+        assert "`" in result
+
 
 class TestFormatMetroLineInfo:
     def test_basic_line(self):
@@ -96,3 +159,9 @@ class TestFormatMetroLineInfo:
         assert "Linha Azul" in result
         assert "Station 1" in result
         assert "3" in result  # station count
+
+    def test_line_code_in_backticks(self):
+        line_data = {"emoji": "🔵", "name": "Linha Azul", "route": "A ↔ B"}
+        stations = ["Station 1"]
+        result = format_metro_line_info("A", line_data, stations)
+        assert "`" in result

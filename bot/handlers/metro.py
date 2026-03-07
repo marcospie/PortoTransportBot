@@ -1,17 +1,20 @@
 """Metro do Porto related handlers."""
 
 import logging
+from datetime import datetime
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from bot.config import METRO_LINES
+from bot.handlers.start import _clear_awaiting
 from bot.keyboards.inline import (
     metro_menu_keyboard,
     metro_lines_keyboard,
     metro_station_results_keyboard,
     metro_station_actions_keyboard,
     metro_line_actions_keyboard,
+    cancel_keyboard,
 )
 from bot.services import metro
 from bot.utils.formatting import escape_md, format_metro_schedule, format_metro_line_info
@@ -42,7 +45,7 @@ async def station_command(update: Update,
         return
 
     query = " ".join(context.args)
-    await _search_and_show_stations(update.message, query)
+    await _search_and_show_stations(update.message, query, context)
 
 
 async def metro_menu_callback(update: Update,
@@ -50,6 +53,7 @@ async def metro_menu_callback(update: Update,
     """Show metro menu."""
     query = update.callback_query
     await query.answer()
+    _clear_awaiting(context)
     await query.edit_message_text(
         "🚇 *Metro do Porto*\n\nEscolhe uma opção:",
         parse_mode="MarkdownV2",
@@ -62,11 +66,12 @@ async def metro_search_callback(update: Update,
     """Prompt user to search for a metro station."""
     query = update.callback_query
     await query.answer()
-    context.user_data[AWAITING_METRO_SEARCH] = True
+    context.user_data[AWAITING_METRO_SEARCH] = datetime.now()
     await query.edit_message_text(
         "🔍 *Pesquisar estação*\n\nEnvia o nome da estação de metro\\.\n"
         "Exemplo: `Trindade`, `Bolhão`, `Aeroporto`",
         parse_mode="MarkdownV2",
+        reply_markup=cancel_keyboard("menu:metro"),
     )
 
 
@@ -221,6 +226,15 @@ async def metro_station_callback(update: Update,
             parse_mode="MarkdownV2",
             reply_markup=metro_station_actions_keyboard(station_name),
         )
+
+        # Onboarding tip for first-time users
+        if not context.user_data.get("onboarded"):
+            context.user_data["onboarded"] = True
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="💡 *Dica:* Podes escrever o nome ou código de qualquer paragem diretamente no chat, sem usar o menu\\!",
+                parse_mode="MarkdownV2",
+            )
     except Exception:
         logger.exception("Error in metro_station_callback for %s", station_name)
         await query.edit_message_text(
@@ -271,6 +285,7 @@ async def metro_location_callback(update: Update,
 
     station_name = query.data.split(":", 2)[-1]
     try:
+        await query.edit_message_reply_markup(reply_markup=None)
         coords = metro.get_station_coordinates(station_name)
         if coords:
             await context.bot.send_location(
@@ -302,16 +317,24 @@ async def metro_location_callback(update: Update,
 async def handle_metro_text_input(update: Update,
                                     context: ContextTypes.DEFAULT_TYPE) -> bool:
     """Handle text input for metro search. Returns True if handled."""
-    if not context.user_data.get(AWAITING_METRO_SEARCH):
-        return False
-
+    ts = context.user_data.get(AWAITING_METRO_SEARCH)
+    if ts and isinstance(ts, datetime) and (datetime.now() - ts).total_seconds() < 300:
+        context.user_data.pop(AWAITING_METRO_SEARCH, None)
+        query = update.message.text.strip()
+        await _search_and_show_stations(update.message, query, context)
+        return True
+    elif ts is True:
+        # Legacy boolean flag
+        context.user_data.pop(AWAITING_METRO_SEARCH, None)
+        query = update.message.text.strip()
+        await _search_and_show_stations(update.message, query, context)
+        return True
+    # Clear expired flag
     context.user_data.pop(AWAITING_METRO_SEARCH, None)
-    query = update.message.text.strip()
-    await _search_and_show_stations(update.message, query)
-    return True
+    return False
 
 
-async def _search_and_show_stations(message, query: str) -> None:
+async def _search_and_show_stations(message, query: str, context=None) -> None:
     """Search for stations and show results."""
     stations = metro.search_stations(query)
 
@@ -347,6 +370,14 @@ async def _search_and_show_stations(message, query: str) -> None:
             parse_mode="MarkdownV2",
             reply_markup=metro_station_actions_keyboard(station["name"]),
         )
+
+        # Onboarding tip for first-time users
+        if context and not context.user_data.get("onboarded"):
+            context.user_data["onboarded"] = True
+            await message.reply_text(
+                "💡 *Dica:* Podes escrever o nome ou código de qualquer paragem diretamente no chat, sem usar o menu\\!",
+                parse_mode="MarkdownV2",
+            )
         return
 
     await message.reply_text(

@@ -7,12 +7,14 @@ from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
+    InlineQueryHandler,
     MessageHandler,
     filters,
 )
 
 from bot.config import TELEGRAM_BOT_TOKEN
-from bot.handlers import bus, favorites, location, metro, start
+from bot.database import init_db, close_db
+from bot.handlers import bus, favorites, inline, location, metro, start
 from bot.services.metro import download_gtfs
 
 logging.basicConfig(
@@ -20,6 +22,17 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
+
+
+async def unknown_callback(update: Update, context) -> None:
+    """Catch-all for unmatched callback queries (stale buttons, etc.)."""
+    await update.callback_query.answer(
+        "Este botão já não é válido. Use /start para recomeçar."
+    )
+    try:
+        await update.callback_query.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        pass
 
 
 async def handle_text(update: Update, context) -> None:
@@ -123,7 +136,9 @@ async def handle_text(update: Update, context) -> None:
 
 
 async def post_init(application: Application) -> None:
-    """Run after bot initialization - download GTFS data."""
+    """Run after bot initialization - set up DB and download GTFS data."""
+    await init_db()
+
     logger.info("Attempting to download Metro GTFS data...")
     success = await download_gtfs()
     if success:
@@ -132,13 +147,24 @@ async def post_init(application: Application) -> None:
         logger.warning("Could not load GTFS data - using frequency estimates")
 
 
+async def post_shutdown(application: Application) -> None:
+    """Clean up resources on shutdown."""
+    await close_db()
+
+
 def main() -> None:
     if not TELEGRAM_BOT_TOKEN:
         print("Error: TELEGRAM_BOT_TOKEN not set.")
         print("Copy .env.example to .env and add your bot token.")
         return
 
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
+    app = (
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .build()
+    )
 
     # Command handlers
     app.add_handler(CommandHandler("start", start.start_command))
@@ -148,6 +174,7 @@ def main() -> None:
     app.add_handler(CommandHandler("stop", bus.stop_command))
     app.add_handler(CommandHandler("station", metro.station_command))
     app.add_handler(CommandHandler("favorites", favorites.favorites_command))
+    app.add_handler(CommandHandler("fav", favorites.fav_quick_command))
 
     # Callback query handlers - menu navigation
     app.add_handler(CallbackQueryHandler(start.main_menu_callback, pattern=r"^menu:main$"))
@@ -155,6 +182,8 @@ def main() -> None:
 
     # Bus callbacks
     app.add_handler(CallbackQueryHandler(bus.bus_menu_callback, pattern=r"^menu:bus$"))
+    app.add_handler(CallbackQueryHandler(bus.bus_find_callback, pattern=r"^bus:find$"))
+    # Legacy aliases for backwards compatibility
     app.add_handler(CallbackQueryHandler(bus.bus_search_callback, pattern=r"^bus:search$"))
     app.add_handler(CallbackQueryHandler(bus.bus_code_callback, pattern=r"^bus:code$"))
     app.add_handler(CallbackQueryHandler(bus.bus_routes_callback, pattern=r"^bus:routes$"))
@@ -180,11 +209,28 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(favorites.add_favorite_callback, pattern=r"^fav:add:.+$"))
     app.add_handler(CallbackQueryHandler(favorites.remove_favorite_callback, pattern=r"^fav:remove:.+$"))
 
+    # Onboarding location shortcut
+    async def onboard_location_callback(update: Update, context):
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text(
+            "📍 Carrega no botão *Perto de mim* no teclado abaixo para partilhar a tua localização\\!",
+            parse_mode="MarkdownV2",
+        )
+
+    app.add_handler(CallbackQueryHandler(onboard_location_callback, pattern=r"^onboard:location$"))
+
+    # Inline query handler (for @BotName queries in any chat)
+    app.add_handler(InlineQueryHandler(inline.inline_query_handler))
+
     # Location handler (user sends their location)
     app.add_handler(MessageHandler(filters.LOCATION, location.location_handler))
 
     # Text message handler (for search inputs and free text)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    # Catch-all for unmatched callback queries (stale buttons, etc.)
+    app.add_handler(CallbackQueryHandler(unknown_callback))
 
     logger.info("Bot starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
