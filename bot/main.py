@@ -12,7 +12,7 @@ from telegram.ext import (
 )
 
 from bot.config import TELEGRAM_BOT_TOKEN
-from bot.handlers import bus, favorites, metro, start
+from bot.handlers import bus, favorites, location, metro, start
 from bot.services.metro import download_gtfs
 
 logging.basicConfig(
@@ -154,6 +154,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(bus.bus_routes_page_callback, pattern=r"^bus:routes:page:\d+$"))
     app.add_handler(CallbackQueryHandler(bus.bus_stop_callback, pattern=r"^bus:stop:.+$"))
     app.add_handler(CallbackQueryHandler(bus.bus_stop_info_callback, pattern=r"^bus:info:.+$"))
+    app.add_handler(CallbackQueryHandler(bus.bus_location_callback, pattern=r"^bus:loc:.+$"))
     app.add_handler(CallbackQueryHandler(bus.bus_route_callback, pattern=r"^bus:route:.+$"))
 
     # Metro callbacks
@@ -163,6 +164,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(metro.metro_freq_callback, pattern=r"^metro:freq$"))
     app.add_handler(CallbackQueryHandler(metro.metro_line_callback, pattern=r"^metro:line:[A-F]$"))
     app.add_handler(CallbackQueryHandler(metro.metro_line_freq_callback, pattern=r"^metro:line_freq:[A-F]$"))
+    app.add_handler(CallbackQueryHandler(metro.metro_location_callback, pattern=r"^metro:loc:.+$"))
     app.add_handler(CallbackQueryHandler(metro.metro_station_callback, pattern=r"^metro:station:.+$"))
     app.add_handler(CallbackQueryHandler(metro.metro_station_lines_callback, pattern=r"^metro:station_lines:.+$"))
 
@@ -170,6 +172,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(favorites.favorites_callback, pattern=r"^menu:favorites$"))
     app.add_handler(CallbackQueryHandler(favorites.add_favorite_callback, pattern=r"^fav:add:.+$"))
     app.add_handler(CallbackQueryHandler(favorites.remove_favorite_callback, pattern=r"^fav:remove:.+$"))
+
+    # Location handler (user sends their location)
+    app.add_handler(MessageHandler(filters.LOCATION, location.location_handler))
 
     # Text message handler (for search inputs and free text)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))

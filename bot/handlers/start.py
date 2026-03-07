@@ -51,6 +51,7 @@ HELP_TEXT = """
 
 *Dicas:*
 • Podes enviar o nome de uma paragem diretamente
+• 📍 Envia a tua localização para ver paragens perto de ti
 • Os tempos dos autocarros são em tempo real
 • Os tempos do metro são estimados com base nas frequências
 • Usa o botão 🔄 para atualizar os dados

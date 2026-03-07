@@ -135,17 +135,23 @@ async def bus_stop_callback(update: Update,
     await query.answer("A carregar...")
 
     stop_id = query.data.split(":")[-1]
-    data = await stcp.get_stop_real_time(stop_id)
-
-    text = format_bus_arrivals(
-        stop_id, data["stop_name"], data["arrivals"],
-    )
-
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
-        reply_markup=bus_stop_actions_keyboard(stop_id),
-    )
+    try:
+        data = await stcp.get_stop_real_time(stop_id)
+        text = format_bus_arrivals(
+            stop_id, data["stop_name"], data["arrivals"],
+        )
+        await query.edit_message_text(
+            text,
+            parse_mode="MarkdownV2",
+            reply_markup=bus_stop_actions_keyboard(stop_id),
+        )
+    except Exception:
+        logger.exception("Error in bus_stop_callback for %s", stop_id)
+        await query.edit_message_text(
+            f"❌ Erro ao carregar paragem *{escape_md(stop_id)}*\\. Tenta novamente\\.",
+            parse_mode="MarkdownV2",
+            reply_markup=bus_menu_keyboard(),
+        )
 
 
 async def bus_stop_info_callback(update: Update,
@@ -184,58 +190,61 @@ async def bus_route_callback(update: Update,
     await query.answer("A carregar...")
 
     route_num = query.data.split(":")[-1]
+    try:
+        # Get route stops for direction 0
+        stops = await stcp.get_route_stops(route_num, direction=0)
 
-    # Get route stops for direction 0
-    stops = await stcp.get_route_stops(route_num, direction=0)
+        if not stops:
+            await query.edit_message_text(
+                f"❌ Não foi possível carregar a linha {escape_md(route_num)}\\.",
+                parse_mode="MarkdownV2",
+                reply_markup=bus_menu_keyboard(),
+            )
+            return
 
-    if not stops:
+        lines = [
+            f"🚌 *Linha {escape_md(route_num)}*\n",
+            f"*Paragens \\({escape_md(str(len(stops)))}\\):*\n",
+        ]
+
+        for i, stop in enumerate(stops):
+            if i == 0 or i == len(stops) - 1:
+                prefix = "🔴"
+            else:
+                prefix = "⚪"
+            lines.append(f"  {prefix} {escape_md(stop['name'])} \\(`{escape_md(stop['stop_id'])}`\\)")
+
+        # Truncate if too long
+        text = "\n".join(lines)
+        if len(text) > 4000:
+            lines = [
+                f"🚌 *Linha {escape_md(route_num)}*\n",
+                f"*{escape_md(str(len(stops)))} paragens*\n",
+                f"🔴 {escape_md(stops[0]['name'])} \\(`{escape_md(stops[0]['stop_id'])}`\\)",
+            ]
+            for stop in stops[1:3]:
+                lines.append(f"⚪ {escape_md(stop['name'])}")
+            lines.append(f"  ⋮ \\.\\.\\.  {escape_md(str(len(stops) - 4))} paragens \\.\\.\\.")
+            for stop in stops[-2:]:
+                lines.append(f"⚪ {escape_md(stop['name'])}")
+            lines.append(f"🔴 {escape_md(stops[-1]['name'])} \\(`{escape_md(stops[-1]['stop_id'])}`\\)")
+            text = "\n".join(lines)
+
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         await query.edit_message_text(
-            f"❌ Não foi possível carregar a linha {escape_md(route_num)}\\.",
+            text,
+            parse_mode="MarkdownV2",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Voltar", callback_data="bus:routes")],
+            ]),
+        )
+    except Exception:
+        logger.exception("Error in bus_route_callback for %s", route_num)
+        await query.edit_message_text(
+            f"❌ Erro ao carregar a linha {escape_md(route_num)}\\. Tenta novamente\\.",
             parse_mode="MarkdownV2",
             reply_markup=bus_menu_keyboard(),
         )
-        return
-
-    lines = [
-        f"🚌 *Linha {escape_md(route_num)}*\n",
-        f"*Paragens \\({escape_md(str(len(stops)))}\\):*\n",
-    ]
-
-    for i, stop in enumerate(stops):
-        if i == 0 or i == len(stops) - 1:
-            prefix = "🔴"
-        else:
-            prefix = "⚪"
-        lines.append(f"  {prefix} {escape_md(stop['name'])} \\(`{escape_md(stop['stop_id'])}`\\)")
-
-    # Truncate if too long
-    text = "\n".join(lines)
-    if len(text) > 4000:
-        # Show only first and last stops
-        lines = [
-            f"🚌 *Linha {escape_md(route_num)}*\n",
-            f"*{escape_md(str(len(stops)))} paragens*\n",
-            f"🔴 {escape_md(stops[0]['name'])} \\(`{escape_md(stops[0]['stop_id'])}`\\)",
-        ]
-        for stop in stops[1:3]:
-            lines.append(f"⚪ {escape_md(stop['name'])}")
-        lines.append(f"  ⋮ \\.\\.\\. {escape_md(str(len(stops) - 4))} paragens \\.\\.\\.")
-        for stop in stops[-2:]:
-            lines.append(f"⚪ {escape_md(stop['name'])}")
-        lines.append(f"🔴 {escape_md(stops[-1]['name'])} \\(`{escape_md(stops[-1]['stop_id'])}`\\)")
-        text = "\n".join(lines)
-
-    keyboard = [
-        [{"text": "🔙 Voltar", "callback_data": "bus:routes"}],
-    ]
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Voltar", callback_data="bus:routes")],
-        ]),
-    )
 
 
 async def handle_bus_text_input(update: Update,
@@ -276,6 +285,44 @@ async def _search_and_show_stops(message, query: str) -> None:
         parse_mode="MarkdownV2",
         reply_markup=bus_stop_results_keyboard(stops),
     )
+
+
+async def bus_location_callback(update: Update,
+                                  context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send stop location on the map."""
+    query = update.callback_query
+    await query.answer("A carregar localização...")
+
+    stop_id = query.data.split(":")[-1]
+    try:
+        info = await stcp.get_stop_info(stop_id)
+        lat = info.get("lat")
+        lon = info.get("lon")
+        if lat and lon:
+            await context.bot.send_location(
+                chat_id=query.message.chat_id,
+                latitude=lat,
+                longitude=lon,
+            )
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"📍 *{escape_md(info.get('name', stop_id))}* \\(`{escape_md(stop_id)}`\\)",
+                parse_mode="MarkdownV2",
+                reply_markup=bus_stop_actions_keyboard(stop_id),
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"❌ Localização não disponível para *{escape_md(stop_id)}*\\.",
+                parse_mode="MarkdownV2",
+            )
+    except Exception:
+        logger.exception("Error sending bus stop location for %s", stop_id)
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="❌ Erro ao obter localização\\. Tenta novamente\\.",
+            parse_mode="MarkdownV2",
+        )
 
 
 async def _send_stop_realtime(message, stop_id: str) -> None:

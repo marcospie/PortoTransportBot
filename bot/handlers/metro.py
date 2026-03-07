@@ -130,23 +130,31 @@ async def metro_line_callback(update: Update,
     await query.answer("A carregar...")
 
     line_code = query.data.split(":")[-1]
-    line_data = METRO_LINES.get(line_code)
-    if not line_data:
+    try:
+        line_data = METRO_LINES.get(line_code)
+        if not line_data:
+            await query.edit_message_text(
+                "❌ Linha não encontrada\\.",
+                parse_mode="MarkdownV2",
+                reply_markup=metro_lines_keyboard(),
+            )
+            return
+
+        stations = metro.get_line_stations(line_code)
+        text = format_metro_line_info(line_code, line_data, stations)
+
         await query.edit_message_text(
-            "❌ Linha não encontrada\\.",
+            text,
+            parse_mode="MarkdownV2",
+            reply_markup=metro_line_actions_keyboard(line_code),
+        )
+    except Exception:
+        logger.exception("Error in metro_line_callback for %s", line_code)
+        await query.edit_message_text(
+            "❌ Erro ao carregar linha\\. Tenta novamente\\.",
             parse_mode="MarkdownV2",
             reply_markup=metro_lines_keyboard(),
         )
-        return
-
-    stations = metro.get_line_stations(line_code)
-    text = format_metro_line_info(line_code, line_data, stations)
-
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
-        reply_markup=metro_line_actions_keyboard(line_code),
-    )
 
 
 async def metro_line_freq_callback(update: Update,
@@ -181,25 +189,33 @@ async def metro_station_callback(update: Update,
     await query.answer("A carregar...")
 
     station_name = query.data.split(":", 2)[-1]
-    departures = metro.get_next_departures(station_name)
+    try:
+        departures = metro.get_next_departures(station_name)
 
-    station_data = metro.STATIONS.get(station_name, {})
-    lines_info = []
-    for lc in station_data.get("lines", []):
-        ld = METRO_LINES.get(lc, {})
-        lines_info.append(f"{ld.get('emoji', '🚇')} {ld.get('name', lc)}")
-    line_info_str = " \\| ".join(escape_md(l) for l in lines_info) if lines_info else ""
+        station_data = metro.STATIONS.get(station_name, {})
+        lines_info = []
+        for lc in station_data.get("lines", []):
+            ld = METRO_LINES.get(lc, {})
+            lines_info.append(f"{ld.get('emoji', '🚇')} {ld.get('name', lc)}")
+        line_info_str = " \\| ".join(escape_md(l) for l in lines_info) if lines_info else ""
 
-    text = format_metro_schedule(station_name, line_info_str, departures)
+        text = format_metro_schedule(station_name, line_info_str, departures)
 
-    if departures and departures[0].get("estimated"):
-        text += "\n\n_⚠️ Tempos estimados com base nas frequências_"
+        if departures and departures[0].get("estimated"):
+            text += "\n\n_⚠️ Tempos estimados com base nas frequências_"
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
-        reply_markup=metro_station_actions_keyboard(station_name),
-    )
+        await query.edit_message_text(
+            text,
+            parse_mode="MarkdownV2",
+            reply_markup=metro_station_actions_keyboard(station_name),
+        )
+    except Exception:
+        logger.exception("Error in metro_station_callback for %s", station_name)
+        await query.edit_message_text(
+            f"❌ Erro ao carregar estação *{escape_md(station_name)}*\\. Tenta novamente\\.",
+            parse_mode="MarkdownV2",
+            reply_markup=metro_menu_keyboard(),
+        )
 
 
 async def metro_station_lines_callback(update: Update,
@@ -233,6 +249,42 @@ async def metro_station_lines_callback(update: Update,
         parse_mode="MarkdownV2",
         reply_markup=metro_station_actions_keyboard(station_name),
     )
+
+
+async def metro_location_callback(update: Update,
+                                     context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send station location on the map."""
+    query = update.callback_query
+    await query.answer("A carregar localização...")
+
+    station_name = query.data.split(":", 2)[-1]
+    try:
+        coords = metro.get_station_coordinates(station_name)
+        if coords:
+            await context.bot.send_location(
+                chat_id=query.message.chat_id,
+                latitude=coords["lat"],
+                longitude=coords["lon"],
+            )
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"📍 *{escape_md(station_name)}*",
+                parse_mode="MarkdownV2",
+                reply_markup=metro_station_actions_keyboard(station_name),
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"❌ Localização não disponível para *{escape_md(station_name)}*\\.",
+                parse_mode="MarkdownV2",
+            )
+    except Exception:
+        logger.exception("Error sending metro location for %s", station_name)
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="❌ Erro ao obter localização\\. Tenta novamente\\.",
+            parse_mode="MarkdownV2",
+        )
 
 
 async def handle_metro_text_input(update: Update,

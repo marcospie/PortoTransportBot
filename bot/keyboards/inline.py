@@ -51,9 +51,12 @@ def bus_stop_actions_keyboard(stop_id: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🔄 Atualizar", callback_data=f"bus:stop:{stop_id}")],
         [
             InlineKeyboardButton("ℹ️ Info paragem", callback_data=f"bus:info:{stop_id}"),
-            InlineKeyboardButton("⭐ Favoritar", callback_data=f"fav:add:bus:{stop_id}"),
+            InlineKeyboardButton("📍 Ver no mapa", callback_data=f"bus:loc:{stop_id}"),
         ],
-        [InlineKeyboardButton("🔙 Voltar", callback_data="menu:bus")],
+        [
+            InlineKeyboardButton("⭐ Favoritar", callback_data=f"fav:add:bus:{stop_id}"),
+            InlineKeyboardButton("🔙 Voltar", callback_data="menu:bus"),
+        ],
     ])
 
 
@@ -130,9 +133,12 @@ def metro_station_actions_keyboard(station_name: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🔄 Atualizar", callback_data=f"metro:station:{station_name}")],
         [
             InlineKeyboardButton("🗺 Linhas", callback_data=f"metro:station_lines:{station_name}"),
-            InlineKeyboardButton("⭐ Favoritar", callback_data=f"fav:add:metro:{station_name}"),
+            InlineKeyboardButton("📍 Ver no mapa", callback_data=f"metro:loc:{station_name}"),
         ],
-        [InlineKeyboardButton("🔙 Voltar", callback_data="menu:metro")],
+        [
+            InlineKeyboardButton("⭐ Favoritar", callback_data=f"fav:add:metro:{station_name}"),
+            InlineKeyboardButton("🔙 Voltar", callback_data="menu:metro"),
+        ],
     ])
 
 

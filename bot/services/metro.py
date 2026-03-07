@@ -23,89 +23,89 @@ logger = logging.getLogger(__name__)
 
 _cache = TTLCache(default_ttl=300)
 
-# Complete list of Metro do Porto stations with line associations
+# Complete list of Metro do Porto stations with line associations and coordinates
 # Source: public information from metrodoporto.pt
 STATIONS: dict[str, dict] = {
-    "Senhor de Matosinhos": {"lines": ["A"], "zone": "MTS"},
-    "Mercado": {"lines": ["A"], "zone": "MTS"},
-    "Brito Capelo": {"lines": ["A"], "zone": "MTS"},
-    "Matosinhos Sul": {"lines": ["A"], "zone": "MTS"},
-    "Câmara de Matosinhos": {"lines": ["A"], "zone": "MTS"},
-    "Parque de Real": {"lines": ["A"], "zone": "MTS"},
-    "Pedro Hispano": {"lines": ["A"], "zone": "MTS"},
-    "Estádio do Mar": {"lines": ["A"], "zone": "MTS"},
-    "Mercado de Matosinhos": {"lines": ["A"], "zone": "MTS"},  # alt name
-    "Senhora da Hora": {"lines": ["A", "B", "C", "E", "F"], "zone": "MTS"},
-    "Sete Bicas": {"lines": ["A", "B", "C", "E"], "zone": "MTS"},
-    "Viso": {"lines": ["A", "B", "C", "E"], "zone": "PRT"},
-    "Ramalde": {"lines": ["A", "B", "C", "E"], "zone": "PRT"},
-    "Francos": {"lines": ["A", "B", "C", "E"], "zone": "PRT"},
-    "Casa da Música": {"lines": ["A", "B", "C", "D", "E", "F"], "zone": "PRT"},
-    "Carolina Michaelis": {"lines": ["A", "B", "C", "E"], "zone": "PRT"},
-    "Lapa": {"lines": ["A", "B", "C", "E"], "zone": "PRT"},
-    "Trindade": {"lines": ["A", "B", "C", "D", "E", "F"], "zone": "PRT"},
-    "Bolhão": {"lines": ["A", "B", "C", "E"], "zone": "PRT"},
-    "Campo 24 de Agosto": {"lines": ["A", "B", "C", "E"], "zone": "PRT"},
-    "Heroísmo": {"lines": ["A", "B", "C", "E"], "zone": "PRT"},
-    "Campanhã": {"lines": ["A", "B", "C", "E", "F"], "zone": "PRT"},
-    "Estádio do Dragão": {"lines": ["A", "B", "E"], "zone": "PRT"},
-    "Nasoni": {"lines": ["C", "F"], "zone": "PRT"},
-    "Nau Vitória": {"lines": ["C", "F"], "zone": "PRT"},
-    "Levada": {"lines": ["C", "F"], "zone": "GDM"},
-    "Rio Tinto": {"lines": ["C", "F"], "zone": "GDM"},
-    "Campainha": {"lines": ["C"], "zone": "GDM"},
-    "Baguim": {"lines": ["C"], "zone": "GDM"},  # alt
-    "Fânzeres": {"lines": ["F"], "zone": "GDM"},
-    "São Roque": {"lines": ["F"], "zone": "GDM"},  # alt
-    "Contumil": {"lines": ["F"], "zone": "GDM"},  # alt
-    "Custió": {"lines": ["C"], "zone": "VLG"},
-    "Araújo": {"lines": ["C"], "zone": "VLG"},
-    "Cândido dos Reis": {"lines": ["C"], "zone": "VLG"},
-    "Fórum da Maia": {"lines": ["C"], "zone": "MAI"},
-    "Parque da Maia": {"lines": ["C"], "zone": "MAI"},
-    "Mandim": {"lines": ["C"], "zone": "MAI"},
-    "Zona Industrial": {"lines": ["C"], "zone": "MAI"},
-    "ISMAI": {"lines": ["C"], "zone": "MAI"},
+    "Senhor de Matosinhos": {"lines": ["A"], "zone": "MTS", "lat": 41.1826, "lon": -8.6873},
+    "Mercado": {"lines": ["A"], "zone": "MTS", "lat": 41.1832, "lon": -8.6823},
+    "Brito Capelo": {"lines": ["A"], "zone": "MTS", "lat": 41.1818, "lon": -8.6764},
+    "Matosinhos Sul": {"lines": ["A"], "zone": "MTS", "lat": 41.1796, "lon": -8.6729},
+    "Câmara de Matosinhos": {"lines": ["A"], "zone": "MTS", "lat": 41.1809, "lon": -8.6678},
+    "Parque de Real": {"lines": ["A"], "zone": "MTS", "lat": 41.1790, "lon": -8.6614},
+    "Pedro Hispano": {"lines": ["A"], "zone": "MTS", "lat": 41.1769, "lon": -8.6571},
+    "Estádio do Mar": {"lines": ["A"], "zone": "MTS", "lat": 41.1738, "lon": -8.6570},
+    "Mercado de Matosinhos": {"lines": ["A"], "zone": "MTS", "lat": 41.1832, "lon": -8.6823},
+    "Senhora da Hora": {"lines": ["A", "B", "C", "E", "F"], "zone": "MTS", "lat": 41.1872, "lon": -8.6583},
+    "Sete Bicas": {"lines": ["A", "B", "C", "E"], "zone": "MTS", "lat": 41.1852, "lon": -8.6520},
+    "Viso": {"lines": ["A", "B", "C", "E"], "zone": "PRT", "lat": 41.1798, "lon": -8.6430},
+    "Ramalde": {"lines": ["A", "B", "C", "E"], "zone": "PRT", "lat": 41.1766, "lon": -8.6395},
+    "Francos": {"lines": ["A", "B", "C", "E"], "zone": "PRT", "lat": 41.1690, "lon": -8.6380},
+    "Casa da Música": {"lines": ["A", "B", "C", "D", "E", "F"], "zone": "PRT", "lat": 41.1585, "lon": -8.6305},
+    "Carolina Michaelis": {"lines": ["A", "B", "C", "E"], "zone": "PRT", "lat": 41.1560, "lon": -8.6256},
+    "Lapa": {"lines": ["A", "B", "C", "E"], "zone": "PRT", "lat": 41.1530, "lon": -8.6193},
+    "Trindade": {"lines": ["A", "B", "C", "D", "E", "F"], "zone": "PRT", "lat": 41.1519, "lon": -8.6102},
+    "Bolhão": {"lines": ["A", "B", "C", "E"], "zone": "PRT", "lat": 41.1499, "lon": -8.6056},
+    "Campo 24 de Agosto": {"lines": ["A", "B", "C", "E"], "zone": "PRT", "lat": 41.1495, "lon": -8.5990},
+    "Heroísmo": {"lines": ["A", "B", "C", "E"], "zone": "PRT", "lat": 41.1481, "lon": -8.5929},
+    "Campanhã": {"lines": ["A", "B", "C", "E", "F"], "zone": "PRT", "lat": 41.1487, "lon": -8.5853},
+    "Estádio do Dragão": {"lines": ["A", "B", "E"], "zone": "PRT", "lat": 41.1614, "lon": -8.5840},
+    "Nasoni": {"lines": ["C", "F"], "zone": "PRT", "lat": 41.1530, "lon": -8.5790},
+    "Nau Vitória": {"lines": ["C", "F"], "zone": "PRT", "lat": 41.1560, "lon": -8.5730},
+    "Levada": {"lines": ["C", "F"], "zone": "GDM", "lat": 41.1590, "lon": -8.5640},
+    "Rio Tinto": {"lines": ["C", "F"], "zone": "GDM", "lat": 41.1630, "lon": -8.5560},
+    "Campainha": {"lines": ["C"], "zone": "GDM", "lat": 41.1680, "lon": -8.5480},
+    "Baguim": {"lines": ["C"], "zone": "GDM", "lat": 41.1720, "lon": -8.5410},
+    "Fânzeres": {"lines": ["F"], "zone": "GDM", "lat": 41.1640, "lon": -8.5480},
+    "São Roque": {"lines": ["F"], "zone": "GDM", "lat": 41.1610, "lon": -8.5520},
+    "Contumil": {"lines": ["F"], "zone": "GDM", "lat": 41.1560, "lon": -8.5680},
+    "Custió": {"lines": ["C"], "zone": "VLG", "lat": 41.1780, "lon": -8.5340},
+    "Araújo": {"lines": ["C"], "zone": "VLG", "lat": 41.1830, "lon": -8.5290},
+    "Cândido dos Reis": {"lines": ["C"], "zone": "VLG", "lat": 41.1880, "lon": -8.5240},
+    "Fórum da Maia": {"lines": ["C"], "zone": "MAI", "lat": 41.2310, "lon": -8.6210},
+    "Parque da Maia": {"lines": ["C"], "zone": "MAI", "lat": 41.2370, "lon": -8.6240},
+    "Mandim": {"lines": ["C"], "zone": "MAI", "lat": 41.2420, "lon": -8.6260},
+    "Zona Industrial": {"lines": ["C"], "zone": "MAI", "lat": 41.2480, "lon": -8.6280},
+    "ISMAI": {"lines": ["C"], "zone": "MAI", "lat": 41.2590, "lon": -8.6290},
     # Line D
-    "Hospital de São João": {"lines": ["D"], "zone": "PRT"},
-    "IPO": {"lines": ["D"], "zone": "PRT"},
-    "Polo Universitário": {"lines": ["D"], "zone": "PRT"},
-    "Salgueiros": {"lines": ["D"], "zone": "PRT"},
-    "Combatentes": {"lines": ["D"], "zone": "PRT"},
-    "Marquês": {"lines": ["D"], "zone": "PRT"},
-    "Faria Guimarães": {"lines": ["D"], "zone": "PRT"},
-    "Aliados": {"lines": ["D"], "zone": "PRT"},
-    "São Bento": {"lines": ["D"], "zone": "PRT"},
-    "Jardim do Morro": {"lines": ["D"], "zone": "VNG"},
-    "General Torres": {"lines": ["D"], "zone": "VNG"},
-    "Santo Ovídio": {"lines": ["D"], "zone": "VNG"},
-    "Manuel Leão": {"lines": ["D"], "zone": "VNG"},
-    "João de Deus": {"lines": ["D"], "zone": "VNG"},
-    "D. João II": {"lines": ["D"], "zone": "VNG"},
-    "Câmara de Gaia": {"lines": ["D"], "zone": "VNG"},
-    "Vila d'Este": {"lines": ["D"], "zone": "VNG"},  # extension
+    "Hospital de São João": {"lines": ["D"], "zone": "PRT", "lat": 41.1856, "lon": -8.6020},
+    "IPO": {"lines": ["D"], "zone": "PRT", "lat": 41.1822, "lon": -8.6038},
+    "Polo Universitário": {"lines": ["D"], "zone": "PRT", "lat": 41.1762, "lon": -8.6019},
+    "Salgueiros": {"lines": ["D"], "zone": "PRT", "lat": 41.1710, "lon": -8.6047},
+    "Combatentes": {"lines": ["D"], "zone": "PRT", "lat": 41.1658, "lon": -8.6079},
+    "Marquês": {"lines": ["D"], "zone": "PRT", "lat": 41.1609, "lon": -8.6091},
+    "Faria Guimarães": {"lines": ["D"], "zone": "PRT", "lat": 41.1565, "lon": -8.6089},
+    "Aliados": {"lines": ["D"], "zone": "PRT", "lat": 41.1475, "lon": -8.6105},
+    "São Bento": {"lines": ["D"], "zone": "PRT", "lat": 41.1454, "lon": -8.6104},
+    "Jardim do Morro": {"lines": ["D"], "zone": "VNG", "lat": 41.1383, "lon": -8.6111},
+    "General Torres": {"lines": ["D"], "zone": "VNG", "lat": 41.1355, "lon": -8.6110},
+    "Santo Ovídio": {"lines": ["D"], "zone": "VNG", "lat": 41.1257, "lon": -8.6085},
+    "Manuel Leão": {"lines": ["D"], "zone": "VNG", "lat": 41.1200, "lon": -8.6080},
+    "João de Deus": {"lines": ["D"], "zone": "VNG", "lat": 41.1150, "lon": -8.6070},
+    "D. João II": {"lines": ["D"], "zone": "VNG", "lat": 41.1100, "lon": -8.6060},
+    "Câmara de Gaia": {"lines": ["D"], "zone": "VNG", "lat": 41.1090, "lon": -8.6100},
+    "Vila d'Este": {"lines": ["D"], "zone": "VNG", "lat": 41.1050, "lon": -8.6130},
     # Line B
-    "Custóias": {"lines": ["B"], "zone": "MTS"},
-    "Zona Industrial B": {"lines": ["B"], "zone": "MAI"},
-    "Mandim B": {"lines": ["B"], "zone": "MAI"},  # different from line C
-    "Crestins": {"lines": ["B"], "zone": "MTS"},
-    "Esposade": {"lines": ["B"], "zone": "PVZ"},  # alt
-    "Varziela": {"lines": ["B"], "zone": "PVZ"},
-    "Árvore": {"lines": ["B"], "zone": "VCD"},
-    "Azurara": {"lines": ["B"], "zone": "VCD"},
-    "Vila do Conde": {"lines": ["B"], "zone": "VCD"},
-    "Santa Clara": {"lines": ["B"], "zone": "PVZ"},
-    "Portas Fronhas": {"lines": ["B"], "zone": "PVZ"},  # alt
-    "Alto de Pega": {"lines": ["B"], "zone": "PVZ"},
-    "Póvoa de Varzim": {"lines": ["B"], "zone": "PVZ"},
+    "Custóias": {"lines": ["B"], "zone": "MTS", "lat": 41.1950, "lon": -8.6530},
+    "Zona Industrial B": {"lines": ["B"], "zone": "MAI", "lat": 41.2030, "lon": -8.6510},
+    "Mandim B": {"lines": ["B"], "zone": "MAI", "lat": 41.2100, "lon": -8.6490},
+    "Crestins": {"lines": ["B"], "zone": "MTS", "lat": 41.2180, "lon": -8.6470},
+    "Esposade": {"lines": ["B"], "zone": "PVZ", "lat": 41.2860, "lon": -8.7280},
+    "Varziela": {"lines": ["B"], "zone": "PVZ", "lat": 41.2760, "lon": -8.7190},
+    "Árvore": {"lines": ["B"], "zone": "VCD", "lat": 41.3060, "lon": -8.7410},
+    "Azurara": {"lines": ["B"], "zone": "VCD", "lat": 41.3130, "lon": -8.7470},
+    "Vila do Conde": {"lines": ["B"], "zone": "VCD", "lat": 41.3510, "lon": -8.7440},
+    "Santa Clara": {"lines": ["B"], "zone": "PVZ", "lat": 41.3610, "lon": -8.7510},
+    "Portas Fronhas": {"lines": ["B"], "zone": "PVZ", "lat": 41.3700, "lon": -8.7560},
+    "Alto de Pega": {"lines": ["B"], "zone": "PVZ", "lat": 41.3760, "lon": -8.7590},
+    "Póvoa de Varzim": {"lines": ["B"], "zone": "PVZ", "lat": 41.3830, "lon": -8.7630},
     # Line E (Airport)
-    "Aeroporto": {"lines": ["E"], "zone": "MTS"},
-    "Verdes": {"lines": ["E"], "zone": "MTS"},
-    "Lidador": {"lines": ["E"], "zone": "MTS"},  # alt
-    "Botica": {"lines": ["E"], "zone": "MAI"},
-    "Fonte do Cuco": {"lines": ["E"], "zone": "MTS"},
-    "Custió E": {"lines": ["E"], "zone": "MTS"},  # alt name
-    "Requezende": {"lines": ["E"], "zone": "MTS"},  # alt
+    "Aeroporto": {"lines": ["E"], "zone": "MTS", "lat": 41.2367, "lon": -8.6700},
+    "Verdes": {"lines": ["E"], "zone": "MTS", "lat": 41.2270, "lon": -8.6650},
+    "Lidador": {"lines": ["E"], "zone": "MTS", "lat": 41.2170, "lon": -8.6610},
+    "Botica": {"lines": ["E"], "zone": "MAI", "lat": 41.2080, "lon": -8.6570},
+    "Fonte do Cuco": {"lines": ["E"], "zone": "MTS", "lat": 41.2010, "lon": -8.6540},
+    "Custió E": {"lines": ["E"], "zone": "MTS", "lat": 41.1960, "lon": -8.6520},
+    "Requezende": {"lines": ["E"], "zone": "MTS", "lat": 41.1920, "lon": -8.6500},
 }
 
 # Typical frequencies (minutes between trains)
@@ -344,6 +344,66 @@ def get_frequency_info(line_code: str) -> dict:
         "weekend": f"A cada {FREQUENCIES['weekend'].get(line_code, '?')} min",
         "hours": f"{OPERATING_HOURS['start'].strftime('%H:%M')} - {OPERATING_HOURS['end'].strftime('%H:%M')}",
     }
+
+
+def get_station_coordinates(station_name: str) -> dict | None:
+    """Get coordinates for a metro station. Returns {"lat": ..., "lon": ...} or None."""
+    data = STATIONS.get(station_name)
+    if not data:
+        # Fuzzy match
+        for name, sdata in STATIONS.items():
+            if station_name.lower() in name.lower():
+                data = sdata
+                break
+    if data and data.get("lat") and data.get("lon"):
+        return {"lat": data["lat"], "lon": data["lon"]}
+    # Fallback: check GTFS data
+    for stop_id, stop_data in _gtfs_stops.items():
+        if stop_data.get("name", "").lower() == station_name.lower():
+            return {"lat": stop_data["lat"], "lon": stop_data["lon"]}
+    return None
+
+
+def get_nearby_stations(lat: float, lon: float,
+                        radius_km: float = 0.75) -> list[dict]:
+    """Find metro stations within a given radius of coordinates."""
+    nearby = []
+    for name, data in STATIONS.items():
+        slat = data.get("lat")
+        slon = data.get("lon")
+        if not slat or not slon:
+            continue
+        dist = _haversine(lat, lon, slat, slon)
+        if dist <= radius_km:
+            lines_info = []
+            for lc in data["lines"]:
+                ld = METRO_LINES.get(lc, {})
+                lines_info.append({
+                    "code": lc,
+                    "name": ld.get("name", f"Linha {lc}"),
+                    "emoji": ld.get("emoji", "🚇"),
+                })
+            nearby.append({
+                "name": name,
+                "distance_m": int(dist * 1000),
+                "lines": lines_info,
+                "lat": slat,
+                "lon": slon,
+            })
+    nearby.sort(key=lambda x: x["distance_m"])
+    return nearby[:10]
+
+
+def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate the distance in km between two points on Earth."""
+    import math
+    R = 6371  # Earth radius in km
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(dlon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 def _is_operating(current_time: time) -> bool:

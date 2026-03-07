@@ -5,11 +5,11 @@ def format_bus_arrivals(stop_code: str, stop_name: str, arrivals: list[dict]) ->
     """Format bus arrival data into a readable Telegram message."""
     if not arrivals:
         return (
-            f"🚏 *{escape_md(stop_name)}* (`{stop_code}`)\n\n"
-            "Sem autocarros previstos na próxima hora."
+            f"🚏 *{escape_md(stop_name)}* \\(`{stop_code}`\\)\n\n"
+            "Sem autocarros previstos na próxima hora\\."
         )
 
-    lines = [f"🚏 *{escape_md(stop_name)}* (`{stop_code}`)\n"]
+    lines = [f"🚏 *{escape_md(stop_name)}* \\(`{stop_code}`\\)\n"]
     lines.append("🕐 *Próximas passagens:*\n")
 
     for arrival in arrivals:
@@ -19,7 +19,7 @@ def format_bus_arrivals(stop_code: str, stop_name: str, arrivals: list[dict]) ->
         lines.append(f"  🚌 *{escape_md(line_num)}* → {escape_md(destination)}")
         lines.append(f"      ⏱ {escape_md(time_str)}\n")
 
-    lines.append(f"\n_Atualizado: {datetime.now().strftime('%H:%M:%S')}_")
+    lines.append(f"\n_Atualizado: {escape_md(datetime.now().strftime('%H:%M:%S'))}_")
     return "\n".join(lines)
 
 
@@ -30,7 +30,7 @@ def format_metro_schedule(station_name: str, line_info: str,
         return (
             f"🚇 *{escape_md(station_name)}*\n"
             f"{line_info}\n\n"
-            "Sem informação de horários disponível."
+            "Sem informação de horários disponível\\."
         )
 
     lines = [
@@ -45,7 +45,7 @@ def format_metro_schedule(station_name: str, line_info: str,
         lines.append(f"  🚃 → {escape_md(direction)}")
         lines.append(f"      ⏱ {escape_md(time_str)}\n")
 
-    lines.append(f"\n_Atualizado: {datetime.now().strftime('%H:%M:%S')}_")
+    lines.append(f"\n_Atualizado: {escape_md(datetime.now().strftime('%H:%M:%S'))}_")
     return "\n".join(lines)
 
 
@@ -55,7 +55,7 @@ def format_route_info(route_num: str, direction: str,
     lines = [
         f"🚌 *Linha {escape_md(route_num)}*",
         f"📍 {escape_md(direction)}\n",
-        "*Paragens:*",
+        "*Paragens:*\n",
     ]
     for i, stop in enumerate(stops, 1):
         prefix = "🔴" if i == 1 or i == len(stops) else "⚪"
@@ -72,9 +72,9 @@ def format_metro_line_info(line_code: str, line_data: dict,
     route = line_data.get("route", "")
 
     lines = [
-        f"{emoji} *{escape_md(name)}* (Linha {line_code})",
+        f"{emoji} *{escape_md(name)}* \\(Linha {line_code}\\)",
         f"📍 {escape_md(route)}\n",
-        f"*Estações ({len(stations)}):*",
+        f"*Estações \\({len(stations)}\\):*",
     ]
     for i, station in enumerate(stations, 1):
         prefix = "🔴" if i == 1 or i == len(stations) else "⚪"
