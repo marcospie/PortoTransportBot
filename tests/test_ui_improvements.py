@@ -44,9 +44,10 @@ class TestOnboardingKeyboard:
 
     def test_has_search_buttons(self):
         kb = onboarding_keyboard()
-        all_data = [btn.callback_data for row in kb.inline_keyboard for btn in row]
-        assert "bus:find" in all_data
-        assert "metro:search" in all_data
+        # Now uses switch_inline_query_current_chat for autocomplete
+        all_texts = [btn.text for row in kb.inline_keyboard for btn in row]
+        assert any("paragem" in t.lower() for t in all_texts)
+        assert any("estação" in t.lower() for t in all_texts)
 
 
 # ===================================================================
@@ -198,9 +199,10 @@ class TestMetroTextInputExpiration:
 class TestEmptyFavoritesKeyboard:
     def test_shows_find_buttons_instead_of_separate_menus(self):
         kb = favorites_keyboard([])
-        all_data = [btn.callback_data for row in kb.inline_keyboard for btn in row]
-        # Should have find buttons, not just "go to bus/metro"
-        assert any("find" in d or "search" in d for d in all_data)
+        # Now uses switch_inline_query_current_chat for autocomplete
+        all_texts = [btn.text for row in kb.inline_keyboard for btn in row]
+        assert any("paragem" in t.lower() for t in all_texts)
+        assert any("estação" in t.lower() for t in all_texts)
 
 
 # ===================================================================
@@ -211,14 +213,14 @@ class TestEmptyFavoritesKeyboard:
 class TestBusMenuMerged:
     def test_has_find_not_separate_search_code(self):
         kb = bus_menu_keyboard()
-        all_data = [btn.callback_data for row in kb.inline_keyboard for btn in row]
-        assert "bus:find" in all_data
+        all_data = [btn.callback_data for row in kb.inline_keyboard for btn in row if btn.callback_data]
+        # Uses switch_inline_query_current_chat now, no bus:search or bus:code
         assert "bus:search" not in all_data
         assert "bus:code" not in all_data
 
     def test_has_three_buttons(self):
         kb = bus_menu_keyboard()
-        # Should have: find, routes, back = 3 rows
+        # Should have: find (inline), routes, back = 3 rows
         assert len(kb.inline_keyboard) == 3
 
 

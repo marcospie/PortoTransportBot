@@ -16,6 +16,7 @@ TRANSLATIONS = {
             "/metro \\- Menu metro\n"
             "/stop \\<código\\> \\- Consulta rápida de paragem\n"
             "/station \\<nome\\> \\- Consulta rápida de estação\n"
+            "/route \\- Planear trajeto\n"
             "/favorites \\- Os teus favoritos"
         ),
         "welcome_with_favs": (
@@ -30,6 +31,7 @@ TRANSLATIONS = {
             "/metro \\- Metro do Porto\n"
             "/stop BCM2 \\- Consultar paragem por código\n"
             "/station Trindade \\- Consultar estação de metro\n"
+            "/route \\- Planear trajeto\n"
             "/favorites \\- Gerir favoritos\n"
             "/help \\- Esta mensagem\n\n"
             "*Como usar:*\n\n"
@@ -88,6 +90,7 @@ TRANSLATIONS = {
             "/metro \\- Metro menu\n"
             "/stop \\<code\\> \\- Quick stop lookup\n"
             "/station \\<name\\> \\- Quick station lookup\n"
+            "/route \\- Plan a route\n"
             "/favorites \\- Your favorites"
         ),
         "welcome_with_favs": (
@@ -102,6 +105,7 @@ TRANSLATIONS = {
             "/metro \\- Porto Metro\n"
             "/stop BCM2 \\- Check stop by code\n"
             "/station Trindade \\- Check metro station\n"
+            "/route \\- Plan a route\n"
             "/favorites \\- Manage favorites\n"
             "/help \\- This message\n\n"
             "*How to use:*\n\n"

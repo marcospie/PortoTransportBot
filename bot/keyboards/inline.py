@@ -9,10 +9,13 @@ from bot.config import METRO_LINES
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔍 Pesquisa rápida",
+                              switch_inline_query_current_chat="")],
         [
             InlineKeyboardButton("🚌 Autocarros (STCP)", callback_data="menu:bus"),
             InlineKeyboardButton("🚇 Metro", callback_data="menu:metro"),
         ],
+        [InlineKeyboardButton("🗺 Planear rota", callback_data="plan:route")],
         [
             InlineKeyboardButton("⭐ Favoritos", callback_data="menu:favorites"),
             InlineKeyboardButton("ℹ️ Ajuda", callback_data="menu:help"),
@@ -24,7 +27,8 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
 
 def bus_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔍 Encontrar paragem", callback_data="bus:find")],
+        [InlineKeyboardButton("🔍 Encontrar paragem",
+                              switch_inline_query_current_chat="bus ")],
         [InlineKeyboardButton("🚌 Ver linhas", callback_data="bus:routes")],
         [InlineKeyboardButton("🔙 Menu principal", callback_data="menu:main")],
     ])
@@ -40,8 +44,10 @@ def onboarding_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📍 Paragens perto de mim", callback_data="onboard:location")],
         [
-            InlineKeyboardButton("🔍 Pesquisar paragem", callback_data="bus:find"),
-            InlineKeyboardButton("🔍 Pesquisar estação", callback_data="metro:search"),
+            InlineKeyboardButton("🔍 Pesquisar paragem",
+                                  switch_inline_query_current_chat="bus "),
+            InlineKeyboardButton("🔍 Pesquisar estação",
+                                  switch_inline_query_current_chat="metro "),
         ],
     ])
 
@@ -109,7 +115,8 @@ def bus_routes_keyboard(routes: list[dict], page: int = 0,
 
 def metro_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔍 Pesquisar estação", callback_data="metro:search")],
+        [InlineKeyboardButton("🔍 Pesquisar estação",
+                              switch_inline_query_current_chat="metro ")],
         [InlineKeyboardButton("🗺 Ver linhas", callback_data="metro:lines")],
         [InlineKeyboardButton("🕐 Frequências", callback_data="metro:freq")],
         [InlineKeyboardButton("🔙 Menu principal", callback_data="menu:main")],
@@ -169,8 +176,10 @@ def metro_line_actions_keyboard(line_code: str) -> InlineKeyboardMarkup:
 def favorites_keyboard(favorites: list[dict]) -> InlineKeyboardMarkup:
     if not favorites:
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔍 Encontrar uma paragem", callback_data="bus:find")],
-            [InlineKeyboardButton("🔍 Encontrar uma estação", callback_data="metro:search")],
+            [InlineKeyboardButton("🔍 Encontrar uma paragem",
+                                  switch_inline_query_current_chat="bus ")],
+            [InlineKeyboardButton("🔍 Encontrar uma estação",
+                                  switch_inline_query_current_chat="metro ")],
             [InlineKeyboardButton("🔙 Menu principal", callback_data="menu:main")],
         ])
 

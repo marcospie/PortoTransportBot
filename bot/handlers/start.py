@@ -29,10 +29,9 @@ def _reply_keyboard(lang: str = "pt") -> ReplyKeyboardMarkup:
 
 def _clear_awaiting(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Clear all AWAITING_* flags from user data."""
-    context.user_data.pop("awaiting_bus_find", None)
-    context.user_data.pop("awaiting_bus_search", None)
-    context.user_data.pop("awaiting_bus_code", None)
-    context.user_data.pop("awaiting_metro_search", None)
+    for key in list(context.user_data.keys()):
+        if key.startswith("awaiting_"):
+            context.user_data.pop(key, None)
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

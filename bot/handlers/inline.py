@@ -1,4 +1,4 @@
-"""Inline query handler for sharing transport info in any chat."""
+"""Inline query handler for sharing transport info and autocomplete search."""
 
 import uuid
 
@@ -13,47 +13,92 @@ from bot.utils.formatting import escape_md
 async def inline_query_handler(update: Update,
                                 context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle inline queries: @BotName <query>."""
-    query = update.inline_query.query.strip()
+    raw_query = update.inline_query.query.strip()
     results = []
 
-    if not query:
-        # Show usage hint
-        results.append(InlineQueryResultArticle(
-            id=str(uuid.uuid4()),
-            title="Escreve um código de paragem ou nome de estação",
-            description="Exemplo: BCM2, Trindade, Bolhão",
-            input_message_content=InputTextMessageContent(
-                message_text=(
-                    "Use @PortoTransportBot seguido do nome da paragem "
-                    "ou estação para ver horários em tempo real\\."
-                ),
-                parse_mode="MarkdownV2",
-            ),
+    if not raw_query:
+        # Show usage hints
+        results.append(_hint_article(
+            "🔍 Pesquisa rápida",
+            "Escreve o nome de uma paragem ou estação...",
+            "Exemplo: Bolhão, Trindade, Casa da Música",
         ))
-    else:
-        # Check if it looks like a stop code (short alphanumeric with digits)
-        is_code = len(query) <= 6 and any(c.isdigit() for c in query)
+        results.append(_hint_article(
+            "🚌 Pesquisar autocarros",
+            "Escreve 'bus' seguido do nome da paragem",
+            "Exemplo: bus Bolhão",
+        ))
+        results.append(_hint_article(
+            "🚇 Pesquisar metro",
+            "Escreve 'metro' seguido do nome da estação",
+            "Exemplo: metro Trindade",
+        ))
+        await update.inline_query.answer(results, cache_time=300)
+        return
 
+    # Check for prefix routing
+    mode = "all"
+    query = raw_query
+    if raw_query.lower().startswith("bus "):
+        mode = "bus"
+        query = raw_query[4:].strip()
+    elif raw_query.lower().startswith("metro "):
+        mode = "metro"
+        query = raw_query[6:].strip()
+
+    if not query:
+        if mode == "bus":
+            results.append(_hint_article(
+                "🚌 Pesquisar paragem",
+                "Continua a escrever o nome ou código...",
+                "Exemplo: Bolhão, BCM2",
+            ))
+        elif mode == "metro":
+            results.append(_hint_article(
+                "🚇 Pesquisar estação",
+                "Continua a escrever o nome da estação...",
+                "Exemplo: Trindade, Bolhão",
+            ))
+        await update.inline_query.answer(results, cache_time=300)
+        return
+
+    # Check if it looks like a stop code
+    is_code = len(query) <= 6 and any(c.isdigit() for c in query)
+
+    if mode in ("all", "bus"):
         if is_code:
             await _add_bus_stop_by_code(query.upper(), results)
+        else:
+            await _add_bus_stops_quick(query, results)
 
-        # Search metro stations
-        _add_metro_stations(query, results)
+    if mode in ("all", "metro"):
+        _add_metro_stations_quick(query, results)
 
-        # Search bus stops by name (only when it doesn't look like a code)
-        if not is_code:
-            await _add_bus_stops_by_name(query, results)
+    if not results:
+        results.append(_hint_article(
+            "🤔 Sem resultados",
+            f"Nenhum resultado para '{query}'",
+            "Tenta outro nome ou código",
+        ))
 
-    # Telegram allows up to 50 results; keep a reasonable limit
-    await update.inline_query.answer(results[:10], cache_time=30)
+    await update.inline_query.answer(results[:15], cache_time=30,
+                                      is_personal=False)
 
 
-# ------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------
+def _hint_article(title: str, description: str, detail: str) -> InlineQueryResultArticle:
+    """Create a hint/placeholder article."""
+    return InlineQueryResultArticle(
+        id=str(uuid.uuid4()),
+        title=title,
+        description=description,
+        input_message_content=InputTextMessageContent(
+            message_text=escape_md(detail),
+            parse_mode="MarkdownV2",
+        ),
+    )
 
-async def _add_bus_stop_by_code(stop_code: str,
-                                results: list) -> None:
+
+async def _add_bus_stop_by_code(stop_code: str, results: list) -> None:
     """Look up a bus stop by its code and append results."""
     try:
         data = await stcp.get_stop_real_time(stop_code)
@@ -86,38 +131,27 @@ async def _add_bus_stop_by_code(stop_code: str,
         pass
 
 
-def _add_metro_stations(query: str, results: list) -> None:
-    """Search metro stations and append results."""
+async def _add_bus_stops_quick(query: str, results: list) -> None:
+    """Search bus stops by name - quick mode for autocomplete (no real-time data)."""
     try:
-        stations = search_stations(query)
-        for station in stations[:3]:
-            name = station["name"]
-            line_emojis = " ".join(
-                l["emoji"] for l in station.get("lines", [])
-            )
+        stops = await stcp.search_stops(query)
+        for stop in stops[:5]:
+            stop_code = stop.get("code", stop.get("stop_id", ""))
+            stop_name = stop.get("name", "")
+            zone = stop.get("zone", "")
 
-            try:
-                departures = get_next_departures(name, count=4)
-                if departures and not departures[0].get("direction", "").startswith("Serviço"):
-                    lines_text = [f"🚇 *{escape_md(name)}*\n"]
-                    for dep in departures[:4]:
-                        direction = escape_md(str(dep.get("direction", "?")))
-                        time_val = escape_md(str(dep.get("time", "?")))
-                        line_info = escape_md(str(dep.get("line", "")))
-                        lines_text.append(
-                            f"  🚃 {line_info} → {direction}")
-                        lines_text.append(f"      ⏱ {time_val}")
-                    text = "\n".join(lines_text)
-                else:
-                    text = f"🚇 *{escape_md(name)}*\nSem partidas disponíveis"
-            except Exception:
-                text = f"🚇 *{escape_md(name)}*\nInformação indisponível"
+            zone_text = f" · Zona {zone}" if zone else ""
+
+            # Quick result without real-time data (faster autocomplete)
+            text = (
+                f"🚏 *{escape_md(stop_name)}*  `{escape_md(stop_code)}`\n\n"
+                f"Para ver horários em tempo real, envia `/stop {escape_md(stop_code)}` no chat\\."
+            )
 
             results.append(InlineQueryResultArticle(
                 id=str(uuid.uuid4()),
-                title=f"🚇 {name}",
-                description=(f"Metro - {line_emojis}"
-                             if line_emojis else "Metro do Porto"),
+                title=f"🚌 {stop_name}",
+                description=f"Paragem {stop_code}{zone_text}",
                 input_message_content=InputTextMessageContent(
                     message_text=text,
                     parse_mode="MarkdownV2",
@@ -127,46 +161,33 @@ def _add_metro_stations(query: str, results: list) -> None:
         pass
 
 
-async def _add_bus_stops_by_name(query: str, results: list) -> None:
-    """Search bus stops by name and append results."""
+def _add_metro_stations_quick(query: str, results: list) -> None:
+    """Search metro stations - quick mode for autocomplete."""
     try:
-        stops = await stcp.search_stops(query)
-        for stop in stops[:3]:
-            stop_code = stop.get("code", "")
-            stop_name = stop.get("name", "")
+        stations = search_stations(query)
+        for station in stations[:5]:
+            name = station["name"]
+            line_emojis = " ".join(
+                l["emoji"] for l in station.get("lines", [])
+            )
+            zone = station.get("zone", "")
+            zone_text = f" · Zona {zone}" if zone else ""
 
-            try:
-                data = await stcp.get_stop_real_time(stop_code)
-                arrivals = data.get("arrivals", [])
-                if arrivals:
-                    lines_text = [
-                        f"🚏 *{escape_md(stop_name)}*  "
-                        f"`{escape_md(stop_code)}`\n"
-                    ]
-                    for arr in arrivals[:5]:
-                        line_num = escape_md(str(arr.get("line", "?")))
-                        dest = escape_md(str(arr.get("destination", "?")))
-                        time_val = escape_md(str(arr.get("time", "?")))
-                        lines_text.append(
-                            f"  🚌 *{line_num}* → {dest}")
-                        lines_text.append(f"      ⏱ {time_val}")
-                    text = "\n".join(lines_text)
-                else:
-                    text = (
-                        f"🚏 *{escape_md(stop_name)}*  "
-                        f"`{escape_md(stop_code)}`\n"
-                        "Sem autocarros previstos"
-                    )
-            except Exception:
-                text = (
-                    f"🚏 *{escape_md(stop_name)}*  "
-                    f"`{escape_md(stop_code)}`"
-                )
+            lines_names = ", ".join(
+                l["name"] for l in station.get("lines", [])
+            )
+
+            text = (
+                f"🚇 *{escape_md(name)}*\n"
+                f"{escape_md(line_emojis)}\n\n"
+                f"Linhas: {escape_md(lines_names)}\n\n"
+                f"Para ver horários, envia `/station {escape_md(name)}` no chat\\."
+            )
 
             results.append(InlineQueryResultArticle(
                 id=str(uuid.uuid4()),
-                title=f"🚌 {stop_name}",
-                description=f"Paragem {stop_code}",
+                title=f"🚇 {name}",
+                description=f"{line_emojis}{zone_text}",
                 input_message_content=InputTextMessageContent(
                     message_text=text,
                     parse_mode="MarkdownV2",

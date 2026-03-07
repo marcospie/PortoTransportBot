@@ -33,8 +33,9 @@ class TestBusMenuKeyboard:
 
     def test_has_find_option(self):
         kb = bus_menu_keyboard()
-        all_data = [btn.callback_data for row in kb.inline_keyboard for btn in row]
-        assert "bus:find" in all_data
+        # Now uses switch_inline_query_current_chat for autocomplete
+        all_texts = [btn.text for row in kb.inline_keyboard for btn in row]
+        assert any("Encontrar" in t for t in all_texts)
 
     def test_has_back_button(self):
         kb = bus_menu_keyboard()
@@ -82,8 +83,9 @@ class TestMetroMenuKeyboard:
 
     def test_has_search(self):
         kb = metro_menu_keyboard()
-        all_data = [btn.callback_data for row in kb.inline_keyboard for btn in row]
-        assert "metro:search" in all_data
+        # Now uses switch_inline_query_current_chat for autocomplete
+        all_texts = [btn.text for row in kb.inline_keyboard for btn in row]
+        assert any("Pesquisar" in t for t in all_texts)
 
 
 class TestMetroLinesKeyboard:

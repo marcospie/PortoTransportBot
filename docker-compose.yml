@@ -6,3 +6,14 @@ services:
       - .env
     volumes:
       - ./data:/app/data
+
+  whatsapp:
+    build: .
+    command: python -m whatsapp.app
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    restart: on-failure
+    volumes:
+      - ./data:/app/data
