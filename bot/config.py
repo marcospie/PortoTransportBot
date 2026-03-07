@@ -18,6 +18,13 @@ GTFS_METRO_URL = (
     "horarios_gtfs_mdp_20_02_2026.zip"
 )
 
+GTFS_STCP_URL = (
+    "https://opendata.porto.digital/dataset/"
+    "5275c986-592c-43f5-8f87-aabbd4e4f3a4/resource/"
+    "c0a07e42-42b8-45cd-89ec-eb800334f81e/download/"
+    "gtfs_static_03_03_2026.zip"
+)
+
 CACHE_TTL_SECONDS = 60
 METRO_SCHEDULE_CACHE_TTL = 3600
 

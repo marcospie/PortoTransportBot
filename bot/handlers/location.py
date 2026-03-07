@@ -12,8 +12,8 @@ from bot.utils.i18n import t, get_lang
 
 logger = logging.getLogger(__name__)
 
-NEARBY_RADIUS_KM = 1.5  # 1500 meters for metro
-BUS_NEARBY_RADIUS_KM = 0.8  # 800 meters for bus stops
+NEARBY_RADIUS_KM = 0.5  # 500 meters for metro
+BUS_NEARBY_RADIUS_KM = 0.2  # 200 meters for bus stops
 
 
 async def location_handler(update: Update,

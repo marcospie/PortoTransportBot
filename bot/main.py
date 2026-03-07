@@ -16,6 +16,7 @@ from bot.config import TELEGRAM_BOT_TOKEN
 from bot.database import init_db, close_db
 from bot.handlers import bus, favorites, inline, location, metro, routes, start
 from bot.services.metro import download_gtfs
+from bot.services.stcp import download_stcp_gtfs
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -215,6 +216,13 @@ async def post_init(application: Application) -> None:
         logger.info("Metro GTFS data loaded successfully")
     else:
         logger.warning("Could not load GTFS data - using frequency estimates")
+
+    logger.info("Attempting to download STCP GTFS data...")
+    stcp_success = await download_stcp_gtfs()
+    if stcp_success:
+        logger.info("STCP GTFS data loaded - nearby bus stops available")
+    else:
+        logger.warning("Could not load STCP GTFS data - nearby bus search limited")
 
 
 async def post_shutdown(application: Application) -> None:

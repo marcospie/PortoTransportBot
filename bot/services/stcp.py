@@ -1,10 +1,17 @@
 """Service for fetching STCP (bus) data from the stcp.pt API."""
 
+import csv
+import io
 import logging
+import math
+import zipfile
 from datetime import datetime
+from pathlib import Path
 
 import aiohttp
+import aiofiles
 
+from bot.config import GTFS_DIR, GTFS_STCP_URL
 from bot.utils.cache import TTLCache
 
 logger = logging.getLogger(__name__)
@@ -12,6 +19,9 @@ logger = logging.getLogger(__name__)
 _cache = TTLCache(default_ttl=60)
 
 API_BASE = "https://stcp.pt/api"
+
+# Local GTFS stop data for geo-search
+_gtfs_bus_stops: list[dict] = []
 
 
 async def _get(path: str, params: dict | None = None,
@@ -166,7 +176,11 @@ async def get_route_stops(route_id: str, direction: int = 0) -> list[dict]:
 
 async def search_nearby_stops(lat: float, lon: float,
                               radius_km: float = 0.4) -> list[dict]:
-    """Search for bus stops near coordinates. Tries API geo-search."""
+    """Search for bus stops near coordinates.
+
+    Tries the API first, then falls back to local GTFS data.
+    """
+    # Try API first
     try:
         data = await _get(
             "/stops/nearby",
@@ -174,30 +188,110 @@ async def search_nearby_stops(lat: float, lon: float,
             cache_ttl=300,
         )
         results = data if isinstance(data, list) else data.get("results", [])
-        stops = []
-        for s in results[:10]:
-            stop_lat = s.get("stop_lat")
-            stop_lon = s.get("stop_lon")
-            dist = 0
-            if stop_lat and stop_lon:
-                dist = int(_geo_distance(lat, lon, stop_lat, stop_lon) * 1000)
-            stops.append({
-                "stop_id": s.get("stop_id", ""),
-                "name": s.get("stop_name", ""),
-                "distance_m": s.get("distance", dist),
-                "lat": stop_lat,
-                "lon": stop_lon,
-            })
-        stops.sort(key=lambda x: x["distance_m"])
-        return stops
+        if results:
+            stops = []
+            for s in results[:10]:
+                stop_lat = s.get("stop_lat")
+                stop_lon = s.get("stop_lon")
+                dist = 0
+                if stop_lat and stop_lon:
+                    dist = int(_geo_distance(lat, lon, stop_lat, stop_lon) * 1000)
+                stops.append({
+                    "stop_id": s.get("stop_id", ""),
+                    "name": s.get("stop_name", ""),
+                    "distance_m": s.get("distance", dist),
+                    "lat": stop_lat,
+                    "lon": stop_lon,
+                })
+            stops.sort(key=lambda x: x["distance_m"])
+            return stops
     except Exception:
-        logger.debug("Nearby stops API not available")
+        logger.debug("Nearby stops API not available, using local GTFS data")
+
+    # Fallback: local GTFS data
+    return _search_nearby_local(lat, lon, radius_km)
+
+
+def _search_nearby_local(lat: float, lon: float,
+                         radius_km: float) -> list[dict]:
+    """Search for nearby stops using locally downloaded GTFS data."""
+    if not _gtfs_bus_stops:
         return []
+
+    stops = []
+    for stop in _gtfs_bus_stops:
+        dist = _geo_distance(lat, lon, stop["lat"], stop["lon"])
+        if dist <= radius_km:
+            stops.append({
+                "stop_id": stop["stop_id"],
+                "name": stop["name"],
+                "distance_m": int(dist * 1000),
+                "lat": stop["lat"],
+                "lon": stop["lon"],
+            })
+
+    stops.sort(key=lambda x: x["distance_m"])
+    return stops[:10]
+
+
+async def download_stcp_gtfs() -> bool:
+    """Download STCP GTFS data and extract bus stop coordinates."""
+    global _gtfs_bus_stops
+    GTFS_DIR.mkdir(parents=True, exist_ok=True)
+    zip_path = GTFS_DIR / "stcp.zip"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                GTFS_STCP_URL, timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
+                if resp.status != 200:
+                    logger.warning("Failed to download STCP GTFS: HTTP %d", resp.status)
+                    return False
+                content = await resp.read()
+                if len(content) < 100:
+                    logger.warning("STCP GTFS download too small")
+                    return False
+
+        async with aiofiles.open(zip_path, "wb") as f:
+            await f.write(content)
+
+        _gtfs_bus_stops = _extract_stcp_stops(zip_path)
+        logger.info("STCP GTFS loaded: %d bus stops", len(_gtfs_bus_stops))
+        return True
+    except Exception:
+        logger.exception("Error downloading STCP GTFS data")
+        return False
+
+
+def _extract_stcp_stops(zip_path: Path) -> list[dict]:
+    """Extract stop coordinates from STCP GTFS zip."""
+    stops = []
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        if "stops.txt" not in zf.namelist():
+            return []
+        with zf.open("stops.txt") as f:
+            reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
+            for row in reader:
+                lat = row.get("stop_lat", "")
+                lon = row.get("stop_lon", "")
+                stop_id = row.get("stop_id", "")
+                name = row.get("stop_name", "")
+                if lat and lon and stop_id and name:
+                    try:
+                        stops.append({
+                            "stop_id": stop_id,
+                            "name": name,
+                            "lat": float(lat),
+                            "lon": float(lon),
+                        })
+                    except ValueError:
+                        continue
+    return stops
 
 
 def _geo_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Approximate distance in km between two points."""
-    import math
+    """Distance in km between two points (haversine)."""
     R = 6371
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
