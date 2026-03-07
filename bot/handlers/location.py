@@ -27,8 +27,13 @@ async def location_handler(update: Update,
     lang = get_lang(update)
     user_id = update.effective_user.id
 
-    # Load user settings for radius
-    user_settings = await get_user_settings(user_id)
+    # Load user settings for radius (fall back to defaults on error)
+    try:
+        user_settings = await get_user_settings(user_id)
+    except Exception:
+        logger.debug("Could not load user settings, using defaults")
+        from bot.database import DEFAULT_SETTINGS
+        user_settings = DEFAULT_SETTINGS
     metro_radius_km = user_settings["metro_radius_m"] / 1000
     bus_radius_km = user_settings["bus_radius_m"] / 1000
     max_results = user_settings["max_results"]

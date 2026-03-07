@@ -54,6 +54,14 @@ CREATE TABLE IF NOT EXISTS user_settings (
 );
 """
 
+# Migrations for existing tables (add columns if missing)
+_MIGRATIONS_SQL = [
+    "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS metro_radius_m INTEGER NOT NULL DEFAULT 500",
+    "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS bus_radius_m INTEGER NOT NULL DEFAULT 200",
+    "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS max_results INTEGER NOT NULL DEFAULT 5",
+    "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS language VARCHAR(10) NOT NULL DEFAULT 'auto'",
+]
+
 # ===================================================================
 # JSON fallback helpers (mirrors the original favorites.py logic)
 # ===================================================================
@@ -113,6 +121,12 @@ async def init_db() -> None:
         _pool = await asyncpg.create_pool(dsn=database_url, min_size=2, max_size=10)
         async with _pool.acquire() as conn:
             await conn.execute(_SCHEMA_SQL)
+            # Run migrations for existing tables
+            for migration in _MIGRATIONS_SQL:
+                try:
+                    await conn.execute(migration)
+                except Exception:
+                    pass  # Column already exists or table doesn't exist yet
         _use_db = True
         logger.info("PostgreSQL database initialised (pool ready)")
     except Exception:
