@@ -282,6 +282,7 @@ class TestCommandDescriptions:
             BotCommand("route", "Planear trajeto"),
             BotCommand("favorites", "Os teus favoritos"),
             BotCommand("fav", "Favorito rápido"),
+            BotCommand("settings", "Configurações"),
             BotCommand("help", "Ajuda"),
         ]
         for cmd in pt_commands:

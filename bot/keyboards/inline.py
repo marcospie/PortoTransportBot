@@ -16,8 +16,9 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🗺 Planear rota", callback_data="plan:route")],
         [
             InlineKeyboardButton("⭐ Favoritos", callback_data="menu:favorites"),
-            InlineKeyboardButton("ℹ️ Ajuda", callback_data="menu:help"),
+            InlineKeyboardButton("⚙️ Config.", callback_data="menu:settings"),
         ],
+        [InlineKeyboardButton("ℹ️ Ajuda", callback_data="menu:help")],
         [InlineKeyboardButton("🔍 Pesquisa rápida",
                               switch_inline_query_current_chat="")],
     ])

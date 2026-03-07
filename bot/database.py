@@ -43,10 +43,14 @@ CREATE TABLE IF NOT EXISTS favorites (
 );
 
 CREATE TABLE IF NOT EXISTS user_settings (
-    user_id      BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    daily_digest BOOLEAN NOT NULL DEFAULT FALSE,
-    digest_time  TIME NOT NULL DEFAULT '07:30',
-    digest_days  VARCHAR(50) NOT NULL DEFAULT 'weekdays'
+    user_id         BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    metro_radius_m  INTEGER NOT NULL DEFAULT 500,
+    bus_radius_m    INTEGER NOT NULL DEFAULT 200,
+    max_results     INTEGER NOT NULL DEFAULT 5,
+    language        VARCHAR(10) NOT NULL DEFAULT 'auto',
+    daily_digest    BOOLEAN NOT NULL DEFAULT FALSE,
+    digest_time     TIME NOT NULL DEFAULT '07:30',
+    digest_days     VARCHAR(50) NOT NULL DEFAULT 'weekdays'
 );
 """
 
@@ -56,6 +60,15 @@ CREATE TABLE IF NOT EXISTS user_settings (
 from bot.config import DATA_DIR  # noqa: E402
 
 _FAVORITES_DIR = DATA_DIR / "favorites"
+_SETTINGS_DIR = DATA_DIR / "settings"
+
+# Default settings values
+DEFAULT_SETTINGS = {
+    "metro_radius_m": 500,
+    "bus_radius_m": 200,
+    "max_results": 5,
+    "language": "auto",
+}
 
 
 def _json_favorites_path(user_id: int) -> Path:
@@ -244,6 +257,79 @@ async def is_favorite(user_id: int, fav_type: str, stop_id: str) -> bool:
             user_id, fav_type, stop_id,
         )
         return row is not None
+
+
+# ===================================================================
+# User settings
+# ===================================================================
+
+def _json_settings_path(user_id: int) -> Path:
+    _SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
+    return _SETTINGS_DIR / f"{user_id}.json"
+
+
+def _json_load_settings(user_id: int) -> dict:
+    path = _json_settings_path(user_id)
+    if not path.exists():
+        return dict(DEFAULT_SETTINGS)
+    try:
+        saved = json.loads(path.read_text())
+        # Merge with defaults so new keys are always present
+        return {**DEFAULT_SETTINGS, **saved}
+    except (json.JSONDecodeError, OSError):
+        return dict(DEFAULT_SETTINGS)
+
+
+def _json_save_settings(user_id: int, settings: dict) -> None:
+    path = _json_settings_path(user_id)
+    path.write_text(json.dumps(settings, ensure_ascii=False, indent=2))
+
+
+async def get_user_settings(user_id: int) -> dict:
+    """Return the user's settings dict."""
+    if not _use_db:
+        return _json_load_settings(user_id)
+
+    await get_or_create_user(user_id)
+    async with _pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT metro_radius_m, bus_radius_m, max_results, language "
+            "FROM user_settings WHERE user_id = $1",
+            user_id,
+        )
+        if row is None:
+            return dict(DEFAULT_SETTINGS)
+        return {
+            "metro_radius_m": row["metro_radius_m"],
+            "bus_radius_m": row["bus_radius_m"],
+            "max_results": row["max_results"],
+            "language": row["language"],
+        }
+
+
+async def update_user_setting(user_id: int, key: str, value) -> None:
+    """Update a single setting for a user."""
+    if key not in DEFAULT_SETTINGS:
+        raise ValueError(f"Unknown setting: {key}")
+
+    if not _use_db:
+        settings = _json_load_settings(user_id)
+        settings[key] = value
+        _json_save_settings(user_id, settings)
+        return
+
+    await get_or_create_user(user_id)
+    async with _pool.acquire() as conn:
+        # Upsert the settings row
+        await conn.execute(
+            f"""
+            INSERT INTO user_settings (user_id, {key})
+            VALUES ($1, $2)
+            ON CONFLICT (user_id)
+            DO UPDATE SET {key} = $2
+            """,
+            user_id, value,
+        )
 
 
 # ===================================================================

@@ -29,7 +29,8 @@ TRANSLATIONS = {
             "  /stop `BCM2` — Consulta rápida\n"
             "  /station `Trindade` — Estação de metro\n"
             "  /route — Planear trajeto\n"
-            "  /favorites — Os teus favoritos\n\n"
+            "  /favorites — Os teus favoritos\n"
+            "  /settings — Configurações\n\n"
             "*Como usar:*\n"
             "1️⃣ Escolhe 🚌 autocarros ou 🚇 metro\n"
             "2️⃣ Pesquisa por nome ou código\n"
@@ -69,6 +70,24 @@ TRANSLATIONS = {
         "kb_nearby": "📍 Perto de mim",
         "kb_favorites": "⭐ Favoritos",
         "kb_help": "ℹ️ Ajuda",
+        # Settings
+        "settings_title": (
+            "⚙️ *Configurações*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Personaliza o teu bot\\.\n"
+            "Toca numa opção para alterar:"
+        ),
+        "settings_metro_radius": "🚇 Raio metro: {value}m",
+        "settings_bus_radius": "🚌 Raio autocarros: {value}m",
+        "settings_max_results": "📊 Máx. resultados: {value}",
+        "settings_language": "🌐 Idioma: {value}",
+        "settings_reset": "🔄 Repor predefinições",
+        "settings_pick_metro_radius": "🚇 *Raio de pesquisa \\- Metro*\n\nEscolhe a distância máxima para encontrar estações de metro perto de ti:",
+        "settings_pick_bus_radius": "🚌 *Raio de pesquisa \\- Autocarros*\n\nEscolhe a distância máxima para encontrar paragens perto de ti:",
+        "settings_pick_max_results": "📊 *Máximo de resultados*\n\nQuantas paragens/estações mostrar na pesquisa por localização:",
+        "settings_pick_language": "🌐 *Idioma*\n\nEscolhe o idioma do bot\\.\n_Automático_ usa o idioma do teu Telegram:",
+        "settings_saved": "Guardado!",
+        "settings_reset_done": "Configurações repostas!",
         # Errors
         "error_generic": "❌ Ocorreu um erro\\. Tenta novamente\\.",
     },
@@ -98,7 +117,8 @@ TRANSLATIONS = {
             "  /stop `BCM2` — Quick stop lookup\n"
             "  /station `Trindade` — Metro station\n"
             "  /route — Plan a route\n"
-            "  /favorites — Your favorites\n\n"
+            "  /favorites — Your favorites\n"
+            "  /settings — Settings\n\n"
             "*How to use:*\n"
             "1️⃣ Choose 🚌 buses or 🚇 metro\n"
             "2️⃣ Search by name or stop code\n"
@@ -138,6 +158,24 @@ TRANSLATIONS = {
         "kb_nearby": "📍 Near me",
         "kb_favorites": "⭐ Favorites",
         "kb_help": "ℹ️ Help",
+        # Settings
+        "settings_title": (
+            "⚙️ *Settings*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Customise your bot\\.\n"
+            "Tap an option to change:"
+        ),
+        "settings_metro_radius": "🚇 Metro radius: {value}m",
+        "settings_bus_radius": "🚌 Bus radius: {value}m",
+        "settings_max_results": "📊 Max results: {value}",
+        "settings_language": "🌐 Language: {value}",
+        "settings_reset": "🔄 Reset defaults",
+        "settings_pick_metro_radius": "🚇 *Search radius \\- Metro*\n\nChoose the max distance to find metro stations near you:",
+        "settings_pick_bus_radius": "🚌 *Search radius \\- Buses*\n\nChoose the max distance to find bus stops near you:",
+        "settings_pick_max_results": "📊 *Maximum results*\n\nHow many stops/stations to show in location search:",
+        "settings_pick_language": "🌐 *Language*\n\nChoose the bot language\\.\n_Auto_ uses your Telegram language:",
+        "settings_saved": "Saved!",
+        "settings_reset_done": "Settings reset!",
         # Errors
         "error_generic": "❌ An error occurred\\. Please try again\\.",
     },

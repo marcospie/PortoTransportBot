@@ -5,6 +5,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
+from bot.database import get_user_settings
 from bot.keyboards.inline import main_menu_keyboard
 from bot.services import metro, stcp
 from bot.utils.formatting import escape_md
@@ -12,6 +13,7 @@ from bot.utils.i18n import t, get_lang
 
 logger = logging.getLogger(__name__)
 
+# Defaults (used when settings are not available)
 NEARBY_RADIUS_KM = 0.5  # 500 meters for metro
 BUS_NEARBY_RADIUS_KM = 0.2  # 200 meters for bus stops
 
@@ -23,28 +25,37 @@ async def location_handler(update: Update,
     lat = loc.latitude
     lon = loc.longitude
     lang = get_lang(update)
+    user_id = update.effective_user.id
+
+    # Load user settings for radius
+    user_settings = await get_user_settings(user_id)
+    metro_radius_km = user_settings["metro_radius_m"] / 1000
+    bus_radius_km = user_settings["bus_radius_m"] / 1000
+    max_results = user_settings["max_results"]
 
     # Find nearby metro stations
-    nearby_stations = metro.get_nearby_stations(lat, lon, NEARBY_RADIUS_KM)
+    nearby_stations = metro.get_nearby_stations(lat, lon, metro_radius_km)
 
     # Try to find nearby bus stops via STCP API
-    nearby_bus = await _get_nearby_bus_stops(lat, lon, BUS_NEARBY_RADIUS_KM)
+    nearby_bus = await _get_nearby_bus_stops(lat, lon, bus_radius_km)
 
     if not nearby_stations and not nearby_bus:
+        radius_display = max(user_settings["metro_radius_m"], user_settings["bus_radius_m"])
         await update.message.reply_text(
-            t("nearby_empty", lang).format(radius=int(NEARBY_RADIUS_KM * 1000)),
+            t("nearby_empty", lang).format(radius=radius_display),
             parse_mode="MarkdownV2",
             reply_markup=main_menu_keyboard(),
         )
         return
 
-    lines = [t("nearby_title", lang).format(radius=int(NEARBY_RADIUS_KM * 1000))]
+    radius_display = max(user_settings["metro_radius_m"], user_settings["bus_radius_m"])
+    lines = [t("nearby_title", lang).format(radius=radius_display)]
     buttons = []
 
     # Metro stations
     if nearby_stations:
         lines.append(f"\n🚇 *{t('metro_stations', lang)}:*\n")
-        for station in nearby_stations[:5]:
+        for station in nearby_stations[:max_results]:
             name = station["name"]
             dist = station["distance_m"]
             lines_emojis = " ".join(l_["emoji"] for l_ in station["lines"])
@@ -63,7 +74,7 @@ async def location_handler(update: Update,
     # Bus stops
     if nearby_bus:
         lines.append(f"\n🚌 *{t('bus_stops', lang)}:*\n")
-        for stop in nearby_bus[:5]:
+        for stop in nearby_bus[:max_results]:
             name = stop["name"]
             dist = stop["distance_m"]
             stop_id = stop["stop_id"]

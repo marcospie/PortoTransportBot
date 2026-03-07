@@ -14,7 +14,7 @@ from telegram.ext import (
 
 from bot.config import TELEGRAM_BOT_TOKEN
 from bot.database import init_db, close_db
-from bot.handlers import bus, favorites, inline, location, metro, routes, start
+from bot.handlers import bus, favorites, inline, location, metro, routes, settings, start
 from bot.services.metro import download_gtfs
 from bot.services.stcp import download_stcp_gtfs
 
@@ -153,6 +153,7 @@ async def post_init(application: Application) -> None:
         BotCommand("route", "Planear trajeto"),
         BotCommand("favorites", "Os teus favoritos"),
         BotCommand("fav", "Favorito rápido"),
+        BotCommand("settings", "Configurações"),
         BotCommand("help", "Ajuda"),
     ]
     en_commands = [
@@ -164,6 +165,7 @@ async def post_init(application: Application) -> None:
         BotCommand("route", "Plan a route"),
         BotCommand("favorites", "Your favorites"),
         BotCommand("fav", "Quick favorite"),
+        BotCommand("settings", "Settings"),
         BotCommand("help", "Help"),
     ]
 
@@ -254,6 +256,7 @@ def main() -> None:
     app.add_handler(CommandHandler("favorites", favorites.favorites_command))
     app.add_handler(CommandHandler("fav", favorites.fav_quick_command))
     app.add_handler(CommandHandler("route", routes.route_command))
+    app.add_handler(CommandHandler("settings", settings.settings_command))
 
     # Callback query handlers - menu navigation
     app.add_handler(CallbackQueryHandler(start.main_menu_callback, pattern=r"^menu:main$"))
@@ -291,6 +294,12 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(favorites.favorites_callback, pattern=r"^menu:favorites$"))
     app.add_handler(CallbackQueryHandler(favorites.add_favorite_callback, pattern=r"^fav:add:.+$"))
     app.add_handler(CallbackQueryHandler(favorites.remove_favorite_callback, pattern=r"^fav:remove:.+$"))
+
+    # Settings callbacks
+    app.add_handler(CallbackQueryHandler(settings.settings_menu_callback, pattern=r"^menu:settings$"))
+    app.add_handler(CallbackQueryHandler(settings.settings_option_callback, pattern=r"^settings:(metro_radius|bus_radius|max_results|language)$"))
+    app.add_handler(CallbackQueryHandler(settings.settings_set_callback, pattern=r"^settings:set:.+$"))
+    app.add_handler(CallbackQueryHandler(settings.settings_reset_callback, pattern=r"^settings:reset$"))
 
     # No-op callback for informational buttons (e.g. page counters)
     app.add_handler(CallbackQueryHandler(
