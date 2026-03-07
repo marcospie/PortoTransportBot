@@ -35,7 +35,7 @@ class TestBusMenuKeyboard:
         kb = bus_menu_keyboard()
         # Now uses switch_inline_query_current_chat for autocomplete
         all_texts = [btn.text for row in kb.inline_keyboard for btn in row]
-        assert any("Encontrar" in t for t in all_texts)
+        assert any("Pesquisar" in t for t in all_texts)
 
     def test_has_back_button(self):
         kb = bus_menu_keyboard()
@@ -92,8 +92,10 @@ class TestMetroLinesKeyboard:
     def test_has_all_lines(self):
         kb = metro_lines_keyboard()
         from bot.config import METRO_LINES
-        # Should have one button per line + back
-        assert len(kb.inline_keyboard) == len(METRO_LINES) + 1
+        # All line buttons should be present (shown in pairs)
+        all_data = [btn.callback_data for row in kb.inline_keyboard for btn in row]
+        for code in METRO_LINES:
+            assert f"metro:line:{code}" in all_data
 
 
 class TestMetroStationResults:

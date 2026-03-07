@@ -44,10 +44,10 @@ class TestOnboardingKeyboard:
 
     def test_has_search_buttons(self):
         kb = onboarding_keyboard()
-        # Now uses switch_inline_query_current_chat for autocomplete
+        # Has inline search buttons for bus and metro
         all_texts = [btn.text for row in kb.inline_keyboard for btn in row]
-        assert any("paragem" in t.lower() for t in all_texts)
-        assert any("estação" in t.lower() for t in all_texts)
+        assert any("autocarro" in t.lower() or "bus" in t.lower() for t in all_texts)
+        assert any("metro" in t.lower() for t in all_texts)
 
 
 # ===================================================================
@@ -211,17 +211,18 @@ class TestEmptyFavoritesKeyboard:
 
 
 class TestBusMenuMerged:
-    def test_has_find_not_separate_search_code(self):
+    def test_has_search_and_code_options(self):
         kb = bus_menu_keyboard()
         all_data = [btn.callback_data for row in kb.inline_keyboard for btn in row if btn.callback_data]
-        # Uses switch_inline_query_current_chat now, no bus:search or bus:code
+        # Has code lookup and routes
+        assert "bus:code" in all_data
+        assert "bus:routes" in all_data
         assert "bus:search" not in all_data
-        assert "bus:code" not in all_data
 
-    def test_has_three_buttons(self):
+    def test_has_four_rows(self):
         kb = bus_menu_keyboard()
-        # Should have: find (inline), routes, back = 3 rows
-        assert len(kb.inline_keyboard) == 3
+        # Should have: search (inline), code, routes, back = 4 rows
+        assert len(kb.inline_keyboard) == 4
 
 
 # ===================================================================

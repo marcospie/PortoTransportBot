@@ -2,7 +2,7 @@
 
 import logging
 
-from telegram import Update
+from telegram import BotCommand, BotCommandScopeAllPrivateChats, MenuButtonCommands, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -138,8 +138,70 @@ async def handle_text(update: Update, context) -> None:
 
 
 async def post_init(application: Application) -> None:
-    """Run after bot initialization - set up DB and download GTFS data."""
+    """Run after bot initialization - set up DB, register commands, download GTFS."""
     await init_db()
+
+    # Register bot commands for autocomplete (PT)
+    pt_commands = [
+        BotCommand("start", "Menu principal"),
+        BotCommand("bus", "Autocarros STCP"),
+        BotCommand("metro", "Metro do Porto"),
+        BotCommand("stop", "Consultar paragem (ex: /stop BCM2)"),
+        BotCommand("station", "Consultar estação (ex: /station Trindade)"),
+        BotCommand("route", "Planear trajeto"),
+        BotCommand("favorites", "Os teus favoritos"),
+        BotCommand("fav", "Ver favorito rápido"),
+        BotCommand("help", "Ajuda e comandos"),
+    ]
+    en_commands = [
+        BotCommand("start", "Main menu"),
+        BotCommand("bus", "STCP Buses"),
+        BotCommand("metro", "Porto Metro"),
+        BotCommand("stop", "Check stop (e.g. /stop BCM2)"),
+        BotCommand("station", "Check station (e.g. /station Trindade)"),
+        BotCommand("route", "Plan a route"),
+        BotCommand("favorites", "Your favorites"),
+        BotCommand("fav", "Quick favorite lookup"),
+        BotCommand("help", "Help and commands"),
+    ]
+
+    bot = application.bot
+    try:
+        # Set commands for private chats in PT (default) and EN
+        scope = BotCommandScopeAllPrivateChats()
+        await bot.set_my_commands(pt_commands, scope=scope, language_code="pt")
+        await bot.set_my_commands(en_commands, scope=scope, language_code="en")
+        # Default fallback (PT)
+        await bot.set_my_commands(pt_commands)
+
+        # Set the menu button to show commands list
+        await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+
+        # Set bot description (shown before user starts the bot)
+        await bot.set_my_description(
+            "Consulta autocarros STCP e Metro do Porto em tempo real. "
+            "Horários, paragens perto de ti, favoritos e planeamento de rotas.",
+            language_code="pt",
+        )
+        await bot.set_my_description(
+            "Real-time Porto public transport info. "
+            "STCP buses, Metro schedules, nearby stops, favorites and route planning.",
+            language_code="en",
+        )
+
+        # Set short description (shown in bot profile)
+        await bot.set_my_short_description(
+            "Transportes do Porto em tempo real - STCP e Metro",
+            language_code="pt",
+        )
+        await bot.set_my_short_description(
+            "Porto public transport in real time - STCP & Metro",
+            language_code="en",
+        )
+
+        logger.info("Bot commands and descriptions registered successfully")
+    except Exception:
+        logger.exception("Failed to register bot commands")
 
     logger.info("Attempting to download Metro GTFS data...")
     success = await download_gtfs()
@@ -215,6 +277,11 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(favorites.favorites_callback, pattern=r"^menu:favorites$"))
     app.add_handler(CallbackQueryHandler(favorites.add_favorite_callback, pattern=r"^fav:add:.+$"))
     app.add_handler(CallbackQueryHandler(favorites.remove_favorite_callback, pattern=r"^fav:remove:.+$"))
+
+    # No-op callback for informational buttons (e.g. page counters)
+    app.add_handler(CallbackQueryHandler(
+        lambda update, _: update.callback_query.answer(), pattern=r"^noop$"
+    ))
 
     # Onboarding location shortcut
     async def onboard_location_callback(update: Update, context):

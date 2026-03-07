@@ -79,9 +79,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
     elif not context.user_data.get("onboarded"):
         # First-time user - show onboarding
+        context.user_data["onboarded"] = True
         await update.message.reply_text(
-            "Olá\\! 👋 Sou o *Porto Transport Bot*\\.\n"
-            "Mostro\\-te autocarros e metro do Porto em tempo real\\.",
+            "👋 Olá\\! Sou o *Porto Transport Bot*\\.\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Consulta transportes públicos do Porto em tempo real\\.\n\n"
+            "Para começar, escolhe uma opção:",
             parse_mode="MarkdownV2",
             reply_markup=onboarding_keyboard(),
         )
