@@ -24,14 +24,21 @@ logger = logging.getLogger(__name__)
 
 async def handle_text(update: Update, context) -> None:
     """Route free-text messages to the appropriate handler."""
+    text = update.message.text.strip()
+
+    # Handle persistent reply keyboard buttons
+    if text in ("⭐ Favoritos", "⭐ Favorites"):
+        await favorites.favorites_command(update, context)
+        return
+    if text in ("ℹ️ Ajuda", "ℹ️ Help"):
+        await start.help_command(update, context)
+        return
+
     # Check if any handler is awaiting input
     if await bus.handle_bus_text_input(update, context):
         return
     if await metro.handle_metro_text_input(update, context):
         return
-
-    # Default: try to interpret as stop code or station name
-    text = update.message.text.strip()
 
     # If it looks like a stop code (short, uppercase, with numbers)
     if len(text) <= 6 and any(c.isdigit() for c in text):

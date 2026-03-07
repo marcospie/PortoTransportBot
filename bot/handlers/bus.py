@@ -13,6 +13,7 @@ from bot.keyboards.inline import (
 )
 from bot.services import stcp
 from bot.utils.formatting import escape_md, format_bus_arrivals
+from bot.utils.i18n import get_zone_display
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +168,8 @@ async def bus_stop_info_callback(update: Update,
         f"🚏 *{escape_md(info['name'])}* \\(`{escape_md(stop_id)}`\\)\n",
     ]
     if info.get("zone"):
-        lines.append(f"📍 Zona: {escape_md(info['zone'])}")
+        zone_display = get_zone_display(info['zone'])
+        lines.append(f"📍 Zona Andante: *{escape_md(zone_display)}*")
     if info.get("lat") and info.get("lon"):
         lines.append(f"🗺 Coordenadas: {info['lat']}, {info['lon']}")
 

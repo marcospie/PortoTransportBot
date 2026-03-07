@@ -164,6 +164,49 @@ async def get_route_stops(route_id: str, direction: int = 0) -> list[dict]:
         return []
 
 
+async def search_nearby_stops(lat: float, lon: float,
+                              radius_km: float = 0.4) -> list[dict]:
+    """Search for bus stops near coordinates. Tries API geo-search."""
+    try:
+        data = await _get(
+            "/stops/nearby",
+            params={"lat": lat, "lon": lon, "radius": int(radius_km * 1000)},
+            cache_ttl=300,
+        )
+        results = data if isinstance(data, list) else data.get("results", [])
+        stops = []
+        for s in results[:10]:
+            stop_lat = s.get("stop_lat")
+            stop_lon = s.get("stop_lon")
+            dist = 0
+            if stop_lat and stop_lon:
+                dist = int(_geo_distance(lat, lon, stop_lat, stop_lon) * 1000)
+            stops.append({
+                "stop_id": s.get("stop_id", ""),
+                "name": s.get("stop_name", ""),
+                "distance_m": s.get("distance", dist),
+                "lat": stop_lat,
+                "lon": stop_lon,
+            })
+        stops.sort(key=lambda x: x["distance_m"])
+        return stops
+    except Exception:
+        logger.debug("Nearby stops API not available")
+        return []
+
+
+def _geo_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Approximate distance in km between two points."""
+    import math
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(dlon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
 def _status_emoji(status: str) -> str:
     status = status.upper()
     if status == "ON_TIME":

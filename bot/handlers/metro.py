@@ -15,6 +15,7 @@ from bot.keyboards.inline import (
 )
 from bot.services import metro
 from bot.utils.formatting import escape_md, format_metro_schedule, format_metro_line_info
+from bot.utils.i18n import get_lang, get_zone_display, t
 
 logger = logging.getLogger(__name__)
 
@@ -201,8 +202,19 @@ async def metro_station_callback(update: Update,
 
         text = format_metro_schedule(station_name, line_info_str, departures)
 
+        # Add zone info if available
+        zone = station_data.get("zone", "")
+        if zone:
+            zone_display = get_zone_display(zone)
+            text += f"\n\n📍 Zona Andante: *{escape_md(zone_display)}*"
+
         if departures and departures[0].get("estimated"):
             text += "\n\n_⚠️ Tempos estimados com base nas frequências_"
+
+        # Night service suggestion when metro is closed
+        if departures and departures[0].get("direction") == "Serviço encerrado":
+            lang = get_lang(update)
+            text = t("metro_closed", lang)
 
         await query.edit_message_text(
             text,
@@ -325,6 +337,10 @@ async def _search_and_show_stations(message, query: str) -> None:
         text = format_metro_schedule(station["name"], line_info_str, departures)
         if departures and departures[0].get("estimated"):
             text += "\n\n_⚠️ Tempos estimados com base nas frequências_"
+
+        # Night service suggestion
+        if departures and departures[0].get("direction") == "Serviço encerrado":
+            text = t("metro_closed", "pt")
 
         await message.reply_text(
             text,
