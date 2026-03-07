@@ -142,37 +142,43 @@ async def post_init(application: Application) -> None:
     await init_db()
 
     # Register bot commands for autocomplete (PT)
+    # Keep descriptions ≤22 chars for iOS compatibility
     pt_commands = [
         BotCommand("start", "Menu principal"),
         BotCommand("bus", "Autocarros STCP"),
         BotCommand("metro", "Metro do Porto"),
-        BotCommand("stop", "Consultar paragem (ex: /stop BCM2)"),
-        BotCommand("station", "Consultar estação (ex: /station Trindade)"),
+        BotCommand("stop", "Paragem por código"),
+        BotCommand("station", "Estação de metro"),
         BotCommand("route", "Planear trajeto"),
         BotCommand("favorites", "Os teus favoritos"),
-        BotCommand("fav", "Ver favorito rápido"),
-        BotCommand("help", "Ajuda e comandos"),
+        BotCommand("fav", "Favorito rápido"),
+        BotCommand("help", "Ajuda"),
     ]
     en_commands = [
         BotCommand("start", "Main menu"),
         BotCommand("bus", "STCP Buses"),
         BotCommand("metro", "Porto Metro"),
-        BotCommand("stop", "Check stop (e.g. /stop BCM2)"),
-        BotCommand("station", "Check station (e.g. /station Trindade)"),
+        BotCommand("stop", "Stop by code"),
+        BotCommand("station", "Metro station"),
         BotCommand("route", "Plan a route"),
         BotCommand("favorites", "Your favorites"),
-        BotCommand("fav", "Quick favorite lookup"),
-        BotCommand("help", "Help and commands"),
+        BotCommand("fav", "Quick favorite"),
+        BotCommand("help", "Help"),
     ]
 
     bot = application.bot
     try:
-        # Set commands for private chats in PT (default) and EN
-        scope = BotCommandScopeAllPrivateChats()
-        await bot.set_my_commands(pt_commands, scope=scope, language_code="pt")
-        await bot.set_my_commands(en_commands, scope=scope, language_code="en")
-        # Default fallback (PT)
+        # Set global default commands (PT) — this is what iOS reads
         await bot.set_my_commands(pt_commands)
+
+        # Also set language-specific commands for clients that support it
+        await bot.set_my_commands(en_commands, language_code="en")
+        await bot.set_my_commands(pt_commands, language_code="pt")
+
+        # Set same for private chats scope (some clients prefer this)
+        scope = BotCommandScopeAllPrivateChats()
+        await bot.set_my_commands(pt_commands, scope=scope)
+        await bot.set_my_commands(en_commands, scope=scope, language_code="en")
 
         # Set the menu button to show commands list
         await bot.set_chat_menu_button(menu_button=MenuButtonCommands())

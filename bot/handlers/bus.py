@@ -89,8 +89,19 @@ async def bus_search_callback(update: Update,
 
 async def bus_code_callback(update: Update,
                              context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Legacy handler - redirects to bus_find_callback."""
-    await bus_find_callback(update, context)
+    """Prompt user to enter stop code."""
+    query = update.callback_query
+    await query.answer()
+    context.user_data[AWAITING_BUS_FIND] = datetime.now()
+    context.user_data.pop(AWAITING_BUS_SEARCH, None)
+    context.user_data.pop(AWAITING_BUS_CODE, None)
+    await query.edit_message_text(
+        "🔢 *Consultar por código*\n\n"
+        "Envia o código da paragem:\n"
+        "Exemplo: `BCM2`, `TRD1`, `BIBG2`",
+        parse_mode="MarkdownV2",
+        reply_markup=cancel_keyboard(),
+    )
 
 
 async def bus_routes_callback(update: Update,
@@ -102,9 +113,14 @@ async def bus_routes_callback(update: Update,
     routes = await stcp.get_routes()
     if not routes:
         await query.edit_message_text(
-            "❌ Não foi possível carregar as linhas\\. Tenta novamente\\.",
+            "❌ Não foi possível carregar as linhas\\.\n\n"
+            "O serviço STCP pode estar temporariamente indisponível\\.\n"
+            "Tenta novamente em alguns minutos\\.",
             parse_mode="MarkdownV2",
-            reply_markup=bus_menu_keyboard(),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Tentar novamente", callback_data="bus:routes")],
+                [InlineKeyboardButton("🔙 Voltar", callback_data="menu:bus")],
+            ]),
         )
         return
 

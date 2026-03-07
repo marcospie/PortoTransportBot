@@ -34,7 +34,6 @@ STATIONS: dict[str, dict] = {
     "Parque de Real": {"lines": ["A"], "zone": "MTS", "lat": 41.1790, "lon": -8.6614},
     "Pedro Hispano": {"lines": ["A"], "zone": "MTS", "lat": 41.1769, "lon": -8.6571},
     "Estádio do Mar": {"lines": ["A"], "zone": "MTS", "lat": 41.1738, "lon": -8.6570},
-    "Mercado de Matosinhos": {"lines": ["A"], "zone": "MTS", "lat": 41.1832, "lon": -8.6823},
     "Senhora da Hora": {"lines": ["A", "B", "C", "E", "F"], "zone": "MTS", "lat": 41.1872, "lon": -8.6583},
     "Sete Bicas": {"lines": ["A", "B", "C", "E"], "zone": "MTS", "lat": 41.1852, "lon": -8.6520},
     "Viso": {"lines": ["A", "B", "C", "E"], "zone": "PRT", "lat": 41.1798, "lon": -8.6430},

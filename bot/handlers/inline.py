@@ -68,6 +68,9 @@ async def inline_query_handler(update: Update,
     if mode in ("all", "bus"):
         if is_code:
             await _add_bus_stop_by_code(query.upper(), results)
+            # Fallback: if code lookup returned nothing, try name search too
+            if not results:
+                await _add_bus_stops_quick(query, results)
         else:
             await _add_bus_stops_quick(query, results)
 
