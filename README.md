@@ -40,6 +40,13 @@ pip install -r requirements.txt
 python run.py
 ```
 
+**No Railway:**
+
+1. Cria um novo projeto no [Railway](https://railway.app)
+2. Liga o teu repositorio GitHub
+3. Adiciona a variavel de ambiente `TELEGRAM_BOT_TOKEN` nas settings do servico
+4. Deploy automatico a cada commit (CD ativado por defeito)
+
 ## Comandos do Bot
 
 | Comando | Descricao |
@@ -62,6 +69,7 @@ Tambem podes enviar texto livre - o bot tenta encontrar paragens ou estacoes que
 ## Testes
 
 ```bash
+pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 

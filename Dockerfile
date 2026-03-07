@@ -9,4 +9,6 @@ COPY . .
 
 RUN mkdir -p data/gtfs data/favorites
 
+ENV PYTHONUNBUFFERED=1
+
 CMD ["python", "run.py"]

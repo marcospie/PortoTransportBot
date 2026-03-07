@@ -12,6 +12,7 @@ build/
 venv/
 env/
 data/gtfs/
+data/favorites/
 *.zip
 .mypy_cache/
 .pytest_cache/
