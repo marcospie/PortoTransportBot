@@ -2,7 +2,7 @@
 
 import logging
 
-from telegram import KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram import KeyboardButton, MenuButtonCommands, ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from bot.database import get_favorites
@@ -38,6 +38,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """Handle /start command with persistent keyboard, deep links, and onboarding."""
     lang = get_lang(update)
     _clear_awaiting(context)
+
+    # Ensure this chat has the commands menu button active
+    try:
+        chat_id = update.effective_chat.id
+        await context.bot.set_chat_menu_button(
+            chat_id=chat_id, menu_button=MenuButtonCommands()
+        )
+    except Exception:
+        pass
 
     # --- Deep link support ---
     if context.args:

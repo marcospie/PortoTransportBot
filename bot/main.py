@@ -173,18 +173,27 @@ async def post_init(application: Application) -> None:
     try:
         # Set global default commands (PT) — this is what iOS reads
         await bot.set_my_commands(pt_commands)
+        logger.info("Global commands set (%d commands)", len(pt_commands))
 
         # Also set language-specific commands for clients that support it
         await bot.set_my_commands(en_commands, language_code="en")
         await bot.set_my_commands(pt_commands, language_code="pt")
+        logger.info("Language-specific commands set (PT + EN)")
 
         # Set same for private chats scope (some clients prefer this)
         scope = BotCommandScopeAllPrivateChats()
         await bot.set_my_commands(pt_commands, scope=scope)
         await bot.set_my_commands(en_commands, scope=scope, language_code="en")
+        await bot.set_my_commands(pt_commands, scope=scope, language_code="pt")
+        logger.info("Private chat scope commands set")
 
         # Set the menu button to show commands list
         await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+
+        # Verify commands were registered
+        registered = await bot.get_my_commands()
+        logger.info("Verified %d commands registered: %s",
+                     len(registered), ", ".join(f"/{c.command}" for c in registered))
 
         # Set bot description (shown before user starts the bot)
         await bot.set_my_description(
