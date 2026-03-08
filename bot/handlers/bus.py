@@ -182,6 +182,8 @@ async def bus_stop_callback(update: Update,
         # Onboarding tip for first-time users
         if not context.user_data.get("onboarded"):
             context.user_data["onboarded"] = True
+            from bot.database import set_user_onboarded
+            await set_user_onboarded(user_id)
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text=t("tip_direct_search", lang),
@@ -422,6 +424,9 @@ async def _send_stop_realtime(message, stop_id: str, context=None, lang: str = "
     # Onboarding tip for first-time users
     if context and not context.user_data.get("onboarded"):
         context.user_data["onboarded"] = True
+        if user_id:
+            from bot.database import set_user_onboarded
+            await set_user_onboarded(user_id)
         await message.reply_text(
             t("tip_direct_search", lang),
             parse_mode="MarkdownV2",

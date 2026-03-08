@@ -70,6 +70,16 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     # Check if user has favorites (returning user)
     user_id = update.effective_user.id
+
+    # Load onboarding state from database if not already in session
+    if not context.user_data.get("onboarded"):
+        try:
+            from bot.database import is_user_onboarded
+            if await is_user_onboarded(user_id):
+                context.user_data["onboarded"] = True
+        except Exception:
+            pass
+
     favs = await get_favorites(user_id)
 
     if favs:

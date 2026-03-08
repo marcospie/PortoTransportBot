@@ -177,6 +177,18 @@ async def set_user_onboarded(user_id: int) -> None:
         )
 
 
+async def is_user_onboarded(user_id: int) -> bool:
+    """Check whether a user has completed onboarding."""
+    if not _use_db:
+        return False
+
+    async with _pool.acquire() as conn:
+        row = await conn.fetchval(
+            "SELECT onboarded FROM users WHERE id = $1", user_id,
+        )
+        return bool(row)
+
+
 async def get_user(user_id: int):
     """Return user row or None."""
     if not _use_db:

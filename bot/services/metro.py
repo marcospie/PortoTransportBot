@@ -145,6 +145,7 @@ async def download_gtfs() -> bool:
             await f.write(content)
 
         _extract_gtfs(zip_path)
+        _build_station_mapping()
         _gtfs_loaded = True
         logger.info("GTFS data loaded successfully")
         return True
@@ -185,6 +186,38 @@ def _extract_gtfs(zip_path: Path) -> None:
         # Sort departure times
         for stop_id in _gtfs_stop_times:
             _gtfs_stop_times[stop_id].sort()
+
+
+# Mapping from station name -> GTFS stop_id(s)
+_station_to_gtfs: dict[str, list[str]] = {}
+
+
+def _build_station_mapping() -> None:
+    """Build mapping from station names to GTFS stop IDs."""
+    global _station_to_gtfs
+    _station_to_gtfs = {}
+
+    if not _gtfs_stops:
+        return
+
+    for station_name, station_data in STATIONS.items():
+        matched_ids = []
+        station_lat = station_data.get("lat", 0)
+        station_lon = station_data.get("lon", 0)
+
+        for stop_id, stop_data in _gtfs_stops.items():
+            # Match by proximity (within 200m)
+            if station_lat and station_lon:
+                dist = _haversine(station_lat, station_lon,
+                                  stop_data.get("lat", 0), stop_data.get("lon", 0))
+                if dist < 0.2:  # 200 meters
+                    matched_ids.append(stop_id)
+
+        if matched_ids:
+            _station_to_gtfs[station_name] = matched_ids
+
+    logger.info("Station mapping built: %d/%d stations mapped",
+                len(_station_to_gtfs), len(STATIONS))
 
 
 def search_stations(query: str) -> list[dict]:
@@ -273,6 +306,13 @@ def get_next_departures(station_name: str, line_code: str | None = None,
             "line": "",
         }]
 
+    # Try GTFS-based schedules first
+    if _gtfs_loaded and station_name in _station_to_gtfs:
+        gtfs_deps = _get_gtfs_departures(station_name, line_code, count, now)
+        if gtfs_deps:
+            return gtfs_deps
+
+    # Fallback to frequency estimation
     # Get applicable frequency
     freq_type = _get_frequency_type(now)
     frequencies = FREQUENCIES[freq_type]
@@ -407,6 +447,84 @@ def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
          math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
          math.sin(dlon / 2) ** 2)
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _get_gtfs_departures(station_name: str, line_code: str | None,
+                          count: int, now: datetime) -> list[dict]:
+    """Get next departures from GTFS stop_times data."""
+    stop_ids = _station_to_gtfs.get(station_name, [])
+    if not stop_ids:
+        return []
+
+    current_time_str = now.strftime("%H:%M:%S")
+
+    # Collect all upcoming departures from all stop_ids for this station
+    upcoming = []
+    for stop_id in stop_ids:
+        times = _gtfs_stop_times.get(stop_id, [])
+        for dep_time in times:
+            if dep_time >= current_time_str:
+                upcoming.append(dep_time)
+                if len(upcoming) >= count * 3:  # Get extra for filtering
+                    break
+
+    upcoming.sort()
+
+    # Get station's line info
+    station_data = STATIONS.get(station_name, {})
+    station_lines = station_data.get("lines", [])
+    lines_to_show = [line_code] if line_code else station_lines
+
+    departures = []
+    for dep_time in upcoming[:count * 2]:
+        # Parse time
+        try:
+            parts = dep_time.split(":")
+            hours = int(parts[0]) % 24
+            minutes = int(parts[1])
+            dep_dt = now.replace(hour=hours, minute=minutes, second=0)
+
+            minutes_until = (dep_dt - now).total_seconds() / 60
+            if minutes_until < 0:
+                continue
+
+            # Determine time display
+            if minutes_until < 1:
+                time_str = "< 1 min"
+            elif minutes_until < 60:
+                time_str = f"{int(minutes_until)} min"
+            else:
+                time_str = dep_dt.strftime("%H:%M")
+
+            # For each line at this station
+            for lc in lines_to_show:
+                if lc not in METRO_LINES:
+                    continue
+                line_data = METRO_LINES[lc]
+                # Show terminus as direction
+                terminals = line_data.get("route", "").split(" ↔ ")
+                direction = terminals[-1] if terminals else ""
+
+                departures.append({
+                    "line": f"{line_data['emoji']} {line_data['name']}",
+                    "line_code": lc,
+                    "direction": direction,
+                    "time": time_str,
+                    "estimated": False,  # Real GTFS data
+                })
+        except (ValueError, IndexError):
+            continue
+
+    # Deduplicate and limit
+    seen = set()
+    unique = []
+    for dep in departures:
+        key = f"{dep['line_code']}:{dep['time']}"
+        if key not in seen:
+            seen.add(key)
+            unique.append(dep)
+
+    return unique[:count]
 
 
 def _is_operating(current_time: time) -> bool:
