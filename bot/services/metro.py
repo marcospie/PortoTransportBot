@@ -131,7 +131,12 @@ OPERATING_HOURS = {"start": time(6, 0), "end": time(1, 0)}
 # GTFS data storage
 _gtfs_loaded = False
 _gtfs_stops: dict[str, dict] = {}
-_gtfs_stop_times: dict[str, list] = {}  # stop_id -> list of departure times
+# trip_id -> {route_id, service_id, headsign, direction_id}
+_gtfs_trips: dict[str, dict] = {}
+# service_id -> {monday..sunday: bool}
+_gtfs_calendar: dict[str, dict] = {}
+# stop_id -> list of {trip_id, departure_time}
+_gtfs_stop_times: dict[str, list[dict]] = {}
 
 
 async def download_gtfs() -> bool:
@@ -158,7 +163,8 @@ async def download_gtfs() -> bool:
         _extract_gtfs(zip_path)
         _build_station_mapping()
         _gtfs_loaded = True
-        logger.info("GTFS data loaded successfully")
+        logger.info("GTFS data loaded successfully (%d stops, %d trips, %d services)",
+                     len(_gtfs_stops), len(_gtfs_trips), len(_gtfs_calendar))
         return True
     except Exception:
         logger.exception("Error downloading GTFS data")
@@ -166,13 +172,60 @@ async def download_gtfs() -> bool:
 
 
 def _extract_gtfs(zip_path: Path) -> None:
-    """Extract and parse relevant GTFS files."""
-    global _gtfs_stops, _gtfs_stop_times
+    """Extract and parse relevant GTFS files including trips and calendar."""
+    global _gtfs_stops, _gtfs_stop_times, _gtfs_trips, _gtfs_calendar
+
+    _gtfs_stops = {}
+    _gtfs_trips = {}
+    _gtfs_calendar = {}
+    _gtfs_stop_times = {}
 
     with zipfile.ZipFile(zip_path, "r") as zf:
+        # Find files — they may be in a subdirectory
+        names = zf.namelist()
+        def _find(fname: str) -> str | None:
+            for n in names:
+                if n.endswith(fname):
+                    return n
+            return None
+
+        # Parse calendar.txt — which services run on which days
+        cal_file = _find("calendar.txt")
+        if cal_file:
+            with zf.open(cal_file) as f:
+                reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
+                for row in reader:
+                    sid = row.get("service_id", "")
+                    if sid:
+                        _gtfs_calendar[sid] = {
+                            "monday": row.get("monday") == "1",
+                            "tuesday": row.get("tuesday") == "1",
+                            "wednesday": row.get("wednesday") == "1",
+                            "thursday": row.get("thursday") == "1",
+                            "friday": row.get("friday") == "1",
+                            "saturday": row.get("saturday") == "1",
+                            "sunday": row.get("sunday") == "1",
+                        }
+
+        # Parse trips.txt — route, service, headsign (direction) per trip
+        trips_file = _find("trips.txt")
+        if trips_file:
+            with zf.open(trips_file) as f:
+                reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
+                for row in reader:
+                    tid = row.get("trip_id", "")
+                    if tid:
+                        _gtfs_trips[tid] = {
+                            "route_id": row.get("route_id", ""),
+                            "service_id": row.get("service_id", ""),
+                            "headsign": row.get("trip_headsign", ""),
+                            "direction_id": row.get("direction_id", "0"),
+                        }
+
         # Parse stops.txt
-        if "stops.txt" in zf.namelist():
-            with zf.open("stops.txt") as f:
+        stops_file = _find("stops.txt")
+        if stops_file:
+            with zf.open(stops_file) as f:
                 reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
                 for row in reader:
                     stop_id = row.get("stop_id", "")
@@ -182,25 +235,34 @@ def _extract_gtfs(zip_path: Path) -> None:
                         "lon": float(row.get("stop_lon", 0)),
                     }
 
-        # Parse stop_times.txt
-        if "stop_times.txt" in zf.namelist():
-            with zf.open("stop_times.txt") as f:
+        # Parse stop_times.txt — store trip_id with each departure
+        st_file = _find("stop_times.txt")
+        if st_file:
+            with zf.open(st_file) as f:
                 reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
                 for row in reader:
                     stop_id = row.get("stop_id", "")
                     dep_time = row.get("departure_time", "")
-                    if stop_id and dep_time:
+                    trip_id = row.get("trip_id", "")
+                    if stop_id and dep_time and trip_id:
                         if stop_id not in _gtfs_stop_times:
                             _gtfs_stop_times[stop_id] = []
-                        _gtfs_stop_times[stop_id].append(dep_time)
+                        _gtfs_stop_times[stop_id].append({
+                            "trip_id": trip_id,
+                            "time": dep_time,
+                        })
 
-        # Sort departure times
+        # Sort by departure time
         for stop_id in _gtfs_stop_times:
-            _gtfs_stop_times[stop_id].sort()
+            _gtfs_stop_times[stop_id].sort(key=lambda x: x["time"])
 
 
 # Mapping from station name -> GTFS stop_id(s)
 _station_to_gtfs: dict[str, list[str]] = {}
+
+# Day-of-week names matching calendar.txt columns
+_DOW_NAMES = ["monday", "tuesday", "wednesday", "thursday",
+              "friday", "saturday", "sunday"]
 
 
 def _build_station_mapping() -> None:
@@ -462,35 +524,57 @@ def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 def _get_gtfs_departures(station_name: str, line_code: str | None,
                           count: int, now: datetime) -> list[dict]:
-    """Get next departures from GTFS stop_times data."""
+    """Get next departures from GTFS data with day filtering and directions."""
     stop_ids = _station_to_gtfs.get(station_name, [])
     if not stop_ids:
         return []
 
     current_time_str = now.strftime("%H:%M:%S")
+    day_name = _DOW_NAMES[now.weekday()]
 
-    # Collect all upcoming departures from all stop_ids for this station
+    # Collect upcoming departures with trip info
     upcoming = []
     for stop_id in stop_ids:
-        times = _gtfs_stop_times.get(stop_id, [])
-        for dep_time in times:
-            if dep_time >= current_time_str:
-                upcoming.append(dep_time)
-                if len(upcoming) >= count * 3:  # Get extra for filtering
-                    break
+        entries = _gtfs_stop_times.get(stop_id, [])
+        for entry in entries:
+            dep_time = entry["time"]
+            if dep_time < current_time_str:
+                continue
 
-    upcoming.sort()
+            trip_id = entry["trip_id"]
+            trip = _gtfs_trips.get(trip_id)
+            if not trip:
+                continue
 
-    # Get station's line info
-    station_data = STATIONS.get(station_name, {})
-    station_lines = station_data.get("lines", [])
-    lines_to_show = [line_code] if line_code else station_lines
+            # Filter by day of week using calendar
+            service_id = trip["service_id"]
+            cal = _gtfs_calendar.get(service_id)
+            if cal and not cal.get(day_name, False):
+                continue
+
+            # Filter by line if requested
+            route_id = trip["route_id"]
+            if line_code and route_id.upper() != line_code.upper():
+                # Also match Bexp -> B
+                if not (line_code.upper() == "B" and route_id.upper() == "BEXP"):
+                    continue
+
+            upcoming.append({
+                "time": dep_time,
+                "route_id": route_id,
+                "headsign": trip["headsign"],
+                "direction_id": trip["direction_id"],
+            })
+
+            if len(upcoming) >= count * 4:
+                break
+
+    upcoming.sort(key=lambda x: x["time"])
 
     departures = []
-    for dep_time in upcoming[:count * 2]:
-        # Parse time
+    for entry in upcoming:
         try:
-            parts = dep_time.split(":")
+            parts = entry["time"].split(":")
             hours = int(parts[0]) % 24
             minutes = int(parts[1])
             dep_dt = now.replace(hour=hours, minute=minutes, second=0)
@@ -499,7 +583,6 @@ def _get_gtfs_departures(station_name: str, line_code: str | None,
             if minutes_until < 0:
                 continue
 
-            # Determine time display
             if minutes_until < 1:
                 time_str = "< 1 min"
             elif minutes_until < 60:
@@ -507,30 +590,29 @@ def _get_gtfs_departures(station_name: str, line_code: str | None,
             else:
                 time_str = dep_dt.strftime("%H:%M")
 
-            # For each line at this station
-            for lc in lines_to_show:
-                if lc not in METRO_LINES:
-                    continue
-                line_data = METRO_LINES[lc]
-                # Show terminus as direction
-                terminals = line_data.get("route", "").split(" ↔ ")
-                direction = terminals[-1] if terminals else ""
+            # Map route_id to line code (Bexp -> B)
+            route_id = entry["route_id"].upper()
+            lc = route_id if route_id in METRO_LINES else route_id.rstrip("EXP")
+            if lc not in METRO_LINES:
+                lc = route_id[0] if route_id else "?"
+            line_data = METRO_LINES.get(lc, {})
 
-                departures.append({
-                    "line": f"{line_data['emoji']} {line_data['name']}",
-                    "line_code": lc,
-                    "direction": direction,
-                    "time": time_str,
-                    "estimated": False,  # Real GTFS data
-                })
+            departures.append({
+                "line": f"{line_data.get('emoji', '🚇')} {line_data.get('name', f'Linha {lc}')}",
+                "line_code": lc,
+                "direction": entry["headsign"],
+                "time": time_str,
+                "minutes": int(minutes_until),
+                "estimated": False,
+            })
         except (ValueError, IndexError):
             continue
 
-    # Deduplicate and limit
+    # Deduplicate: same line + direction + time
     seen = set()
     unique = []
     for dep in departures:
-        key = f"{dep['line_code']}:{dep['time']}"
+        key = f"{dep['line_code']}:{dep['direction']}:{dep['time']}"
         if key not in seen:
             seen.add(key)
             unique.append(dep)

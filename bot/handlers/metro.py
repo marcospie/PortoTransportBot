@@ -239,6 +239,8 @@ async def metro_station_callback(update: Update,
 
         if departures and departures[0].get("estimated"):
             text += f"\n\n{t('metro_estimated_warning', lang)}"
+        elif departures and not departures[0].get("estimated") and departures[0].get("line"):
+            text += f"\n\n{t('metro_scheduled_note', lang)}"
 
         # Night service suggestion when metro is closed
         if departures and departures[0].get("direction") == "Serviço encerrado":
@@ -391,6 +393,8 @@ async def _search_and_show_stations(message, query: str, context=None, lang: str
         text = format_metro_schedule(station["name"], line_info_str, departures)
         if departures and departures[0].get("estimated"):
             text += f"\n\n{t('metro_estimated_warning', lang)}"
+        elif departures and not departures[0].get("estimated") and departures[0].get("line"):
+            text += f"\n\n{t('metro_scheduled_note', lang)}"
 
         # Night service suggestion
         if departures and departures[0].get("direction") == "Serviço encerrado":
