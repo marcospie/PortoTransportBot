@@ -54,7 +54,7 @@ async def tourist_menu_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def tourist_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show destinations for a tourist category."""
+    """Show destinations for a tourist category with transport summary."""
     query = update.callback_query
     await query.answer()
     lang = get_lang(update)
@@ -78,7 +78,6 @@ async def tourist_category_callback(update: Update, context: ContextTypes.DEFAUL
     title = cat["title_pt"] if lang == "pt" else cat["title_en"]
 
     if not cat.get("destinations"):
-        # Category with no destinations (tickets is handled above)
         await query.edit_message_text(
             t("tourist_no_destinations", lang),
             parse_mode="MarkdownV2",
@@ -86,7 +85,13 @@ async def tourist_category_callback(update: Update, context: ContextTypes.DEFAUL
         )
         return
 
-    text = t("tourist_category_title", lang).format(emoji=emoji, title=escape_md(title))
+    # Build message with transport summary for each destination
+    text = _format_category_with_transport(cat, emoji, title, lang)
+
+    # Truncate if too long for Telegram
+    if len(text) > 4000:
+        text = text[:3950] + "\n\n\\.\\.\\. _\\(truncado\\)_"
+
     await query.edit_message_text(
         text,
         parse_mode="MarkdownV2",
@@ -121,7 +126,6 @@ async def tourist_destination_callback(update: Update, context: ContextTypes.DEF
 
     # Determine station for map button
     station = dest.get("station")
-    # Only pass station for metro-based destinations that match real stations
     from bot.services.metro import STATIONS
     map_station = station if station and station in STATIONS else None
 
@@ -145,6 +149,64 @@ async def tourist_tickets_callback(update: Update, context: ContextTypes.DEFAULT
 # ===================================================================
 # Helpers
 # ===================================================================
+
+def _format_category_with_transport(cat: dict, emoji: str, title: str, lang: str) -> str:
+    """Format a category overview with compact transport info for each destination."""
+    lines = [f"{emoji} *{escape_md(title)}*", "━━━━━━━━━━━━━━━━", ""]
+
+    for dest in cat.get("destinations", []):
+        name = dest["name_pt"] if lang == "pt" else dest["name_en"]
+        station = dest.get("station", "")
+        line_info = dest.get("line", "")
+        line_name = dest.get("line_name", "")
+        bus_alt = dest.get("bus_alt", "")
+        zone = dest.get("zone", "")
+        walk_min = dest.get("walk_min", 0)
+
+        lines.append(f"📍 *{escape_md(name)}*")
+
+        if dest.get("best_transport") == "bus":
+            transport_line = f"🚌 {escape_md(line_name or line_info)}"
+        else:
+            transport_line = f"🚇 {escape_md(station)}"
+            if line_name:
+                transport_line += f" \\— {escape_md(line_name)}"
+
+        lines.append(transport_line)
+
+        if bus_alt and dest.get("best_transport") != "bus":
+            if lang == "pt":
+                lines.append(f"🚌 Autocarro: {escape_md(bus_alt)}")
+            else:
+                lines.append(f"🚌 Bus: {escape_md(bus_alt)}")
+
+        extras = []
+        if zone:
+            extras.append(escape_md(zone))
+        if walk_min and walk_min > 0:
+            if lang == "pt":
+                extras.append(f"~{walk_min} min a pé")
+            else:
+                extras.append(f"~{walk_min} min walk")
+        else:
+            if lang == "pt":
+                extras.append("saída direta")
+            else:
+                extras.append("direct exit")
+
+        if extras:
+            sep = " \\| "
+            lines.append(f"🎫 {sep.join(extras)}")
+
+        # Compact tip
+        tip = dest.get("tip_pt" if lang == "pt" else "tip_en", "")
+        if tip:
+            lines.append(f"💡 _{escape_md(tip)}_")
+
+        lines.append("")
+
+    return "\n".join(lines)
+
 
 def _format_destination(dest: dict, emoji: str, lang: str) -> str:
     """Format a destination dict into a MarkdownV2 message."""
