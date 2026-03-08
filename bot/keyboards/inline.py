@@ -193,6 +193,7 @@ def metro_station_actions_keyboard(station_name: str, is_fav: bool = False, lang
     else:
         fav_button = InlineKeyboardButton(t("kb_favorite", lang), callback_data=f"fav:add:metro:{station_name}")
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("kb_realtime", lang), callback_data=f"metro:realtime:{station_name}")],
         [InlineKeyboardButton(t("kb_refresh", lang), callback_data=f"metro:station:{station_name}")],
         [
             InlineKeyboardButton(t("kb_lines", lang), callback_data=f"metro:station_lines:{station_name}"),

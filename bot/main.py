@@ -350,6 +350,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(metro.metro_line_callback, pattern=r"^metro:line:[A-F]$"))
     app.add_handler(CallbackQueryHandler(metro.metro_line_freq_callback, pattern=r"^metro:line_freq:[A-F]$"))
     app.add_handler(CallbackQueryHandler(metro.metro_location_callback, pattern=r"^metro:loc:.+$"))
+    app.add_handler(CallbackQueryHandler(metro.metro_station_realtime_callback, pattern=r"^metro:realtime:.+$"))
     app.add_handler(CallbackQueryHandler(metro.metro_station_callback, pattern=r"^metro:station:.+$"))
     app.add_handler(CallbackQueryHandler(metro.metro_station_lines_callback, pattern=r"^metro:station_lines:.+$"))
 

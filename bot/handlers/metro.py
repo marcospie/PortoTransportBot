@@ -209,9 +209,42 @@ async def metro_line_freq_callback(update: Update,
     )
 
 
+def _build_station_text(station_name: str, departures: list[dict],
+                        lang: str) -> str:
+    """Build the formatted text for a metro station's departures."""
+    station_data = metro.STATIONS.get(station_name, {})
+    lines_info = []
+    for lc in station_data.get("lines", []):
+        ld = METRO_LINES.get(lc, {})
+        lines_info.append(f"{ld.get('emoji', '🚇')} {ld.get('name', lc)}")
+    line_info_str = " \\| ".join(escape_md(l) for l in lines_info) if lines_info else ""
+
+    text = format_metro_schedule(station_name, line_info_str, departures)
+
+    # Add zone info if available
+    zone = station_data.get("zone", "")
+    if zone:
+        zone_display = get_zone_display(zone)
+        text += f"\n\n{t('zone_info', lang).format(zone=escape_md(zone_display))}"
+
+    has_realtime = departures and departures[0].get("realtime")
+    if has_realtime:
+        text += f"\n\n{t('metro_realtime_note', lang)}"
+    elif departures and departures[0].get("estimated"):
+        text += f"\n\n{t('metro_estimated_warning', lang)}"
+    elif departures and not departures[0].get("estimated") and departures[0].get("line"):
+        text += f"\n\n{t('metro_scheduled_note', lang)}"
+
+    # Night service suggestion when metro is closed
+    if departures and departures[0].get("direction") == "Serviço encerrado":
+        text = t("metro_closed", lang)
+
+    return text
+
+
 async def metro_station_callback(update: Update,
                                    context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show station departures."""
+    """Show station departures (fast: GTFS/estimated data only)."""
     query = update.callback_query
     lang = get_lang(update)
     await query.answer(t("loading", lang))
@@ -220,34 +253,10 @@ async def metro_station_callback(update: Update,
     try:
         user_id = query.from_user.id
         is_fav = await is_favorite(user_id, "metro", station_name)
-        departures = await metro.get_next_departures_async(station_name)
+        # Use fast local data (GTFS or frequency estimate) — no network call
+        departures = metro.get_next_departures(station_name)
 
-        station_data = metro.STATIONS.get(station_name, {})
-        lines_info = []
-        for lc in station_data.get("lines", []):
-            ld = METRO_LINES.get(lc, {})
-            lines_info.append(f"{ld.get('emoji', '🚇')} {ld.get('name', lc)}")
-        line_info_str = " \\| ".join(escape_md(l) for l in lines_info) if lines_info else ""
-
-        text = format_metro_schedule(station_name, line_info_str, departures)
-
-        # Add zone info if available
-        zone = station_data.get("zone", "")
-        if zone:
-            zone_display = get_zone_display(zone)
-            text += f"\n\n{t('zone_info', lang).format(zone=escape_md(zone_display))}"
-
-        has_realtime = departures and departures[0].get("realtime")
-        if has_realtime:
-            text += f"\n\n{t('metro_realtime_note', lang)}"
-        elif departures and departures[0].get("estimated"):
-            text += f"\n\n{t('metro_estimated_warning', lang)}"
-        elif departures and not departures[0].get("estimated") and departures[0].get("line"):
-            text += f"\n\n{t('metro_scheduled_note', lang)}"
-
-        # Night service suggestion when metro is closed
-        if departures and departures[0].get("direction") == "Serviço encerrado":
-            text = t("metro_closed", lang)
+        text = _build_station_text(station_name, departures, lang)
 
         await query.edit_message_text(
             text,
@@ -267,6 +276,36 @@ async def metro_station_callback(update: Update,
             )
     except Exception:
         logger.exception("Error in metro_station_callback for %s", station_name)
+        await query.edit_message_text(
+            t("error_load_station", lang).format(name=escape_md(station_name)),
+            parse_mode="MarkdownV2",
+            reply_markup=metro_menu_keyboard(lang),
+        )
+
+
+async def metro_station_realtime_callback(update: Update,
+                                           context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Fetch real-time departures and update the same message."""
+    query = update.callback_query
+    lang = get_lang(update)
+    await query.answer(t("loading", lang))
+
+    station_name = query.data.split(":", 2)[-1]
+    try:
+        user_id = query.from_user.id
+        is_fav = await is_favorite(user_id, "metro", station_name)
+
+        departures = await metro.get_next_departures_async(station_name)
+
+        text = _build_station_text(station_name, departures, lang)
+
+        await query.edit_message_text(
+            text,
+            parse_mode="MarkdownV2",
+            reply_markup=metro_station_actions_keyboard(station_name, is_fav=is_fav, lang=lang),
+        )
+    except Exception:
+        logger.exception("Error in metro_station_realtime_callback for %s", station_name)
         await query.edit_message_text(
             t("error_load_station", lang).format(name=escape_md(station_name)),
             parse_mode="MarkdownV2",
