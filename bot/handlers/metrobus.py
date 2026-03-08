@@ -35,6 +35,7 @@ async def metrobus_menu_callback(update: Update,
     query = update.callback_query
     await query.answer()
     lang = get_lang(update)
+    context.user_data.pop("metrobus_back", None)
     await query.edit_message_text(
         t("metrobus_title", lang),
         parse_mode="MarkdownV2",
@@ -225,10 +226,11 @@ async def metrobus_stop_callback(update: Update,
         if departures and departures[0].get("direction") == "Serviço encerrado":
             text = t("metrobus_closed", lang)
 
+        back_cb = context.user_data.get("metrobus_back", "menu:metrobus")
         await query.edit_message_text(
             text,
             parse_mode="MarkdownV2",
-            reply_markup=metrobus_stop_actions_keyboard(stop_name, is_fav=is_fav, lang=lang),
+            reply_markup=metrobus_stop_actions_keyboard(stop_name, is_fav=is_fav, lang=lang, back_callback=back_cb),
         )
     except Exception:
         logger.exception("Error in metrobus_stop_callback for %s", stop_name)

@@ -60,6 +60,7 @@ async def bus_menu_callback(update: Update,
     lang = get_lang(update)
     _clear_awaiting(context)
     context.user_data.pop("bus_routes", None)
+    context.user_data.pop("bus_back", None)
     await query.edit_message_text(
         t("bus_title", lang),
         parse_mode="MarkdownV2",
@@ -173,10 +174,11 @@ async def bus_stop_callback(update: Update,
         text = format_bus_arrivals(
             stop_id, data["stop_name"], data["arrivals"],
         )
+        back_cb = context.user_data.get("bus_back", "menu:bus")
         await query.edit_message_text(
             text,
             parse_mode="MarkdownV2",
-            reply_markup=bus_stop_actions_keyboard(stop_id, is_fav=is_fav, lang=lang),
+            reply_markup=bus_stop_actions_keyboard(stop_id, is_fav=is_fav, lang=lang, back_callback=back_cb),
         )
 
         # Onboarding tip for first-time users

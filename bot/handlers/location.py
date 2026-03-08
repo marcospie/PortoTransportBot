@@ -63,6 +63,11 @@ async def location_handler(update: Update,
     lines = [t("nearby_title", lang).format(radius=radius_display)]
     buttons = []
 
+    # Remember context so station/stop detail can navigate back here
+    context.user_data["metro_back"] = "nearby:refresh"
+    context.user_data["bus_back"] = "nearby:refresh"
+    context.user_data["metrobus_back"] = "nearby:refresh"
+
     # Metro stations
     if nearby_stations:
         lines.append(f"\n🚇 *{t('metro_stations', lang)}:*\n")
@@ -185,6 +190,11 @@ async def nearby_refresh_callback(update: Update,
     radius_display = max(user_settings["metro_radius_m"], user_settings["bus_radius_m"])
     lines = [t("nearby_title", lang).format(radius=radius_display)]
     buttons = []
+
+    # Remember context so station/stop detail can navigate back here
+    context.user_data["metro_back"] = "nearby:refresh"
+    context.user_data["bus_back"] = "nearby:refresh"
+    context.user_data["metrobus_back"] = "nearby:refresh"
 
     # Metro stations
     if nearby_stations:

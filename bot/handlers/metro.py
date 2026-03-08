@@ -60,6 +60,7 @@ async def metro_menu_callback(update: Update,
     await query.answer()
     lang = get_lang(update)
     _clear_awaiting(context)
+    context.user_data.pop("metro_back", None)
     await query.edit_message_text(
         t("metro_title", lang),
         parse_mode="MarkdownV2",
@@ -167,6 +168,9 @@ async def metro_line_callback(update: Update,
         tap_hint = "_Toca numa estação para ver horários_" if lang == "pt" else "_Tap a station to see schedules_"
         text += "\n\n" + tap_hint
 
+        # Remember where to go back from station detail
+        context.user_data["metro_back"] = f"metro:line:{line_code}"
+
         await query.edit_message_text(
             text,
             parse_mode="MarkdownV2",
@@ -258,10 +262,14 @@ async def metro_station_callback(update: Update,
 
         text = _build_station_text(station_name, departures, lang)
 
+        back_cb = context.user_data.get("metro_back", "menu:metro")
         await query.edit_message_text(
             text,
             parse_mode="MarkdownV2",
-            reply_markup=metro_station_actions_keyboard(station_name, is_fav=is_fav, lang=lang),
+            reply_markup=metro_station_actions_keyboard(
+                station_name, is_fav=is_fav, lang=lang,
+                back_callback=back_cb,
+            ),
         )
 
         # Onboarding tip for first-time users

@@ -90,11 +90,14 @@ def bus_stop_results_keyboard(stops: list[dict], lang: str = "pt") -> InlineKeyb
     return InlineKeyboardMarkup(buttons)
 
 
-def bus_stop_actions_keyboard(stop_id: str, is_fav: bool = False, lang: str = "pt") -> InlineKeyboardMarkup:
+def bus_stop_actions_keyboard(stop_id: str, is_fav: bool = False,
+                              lang: str = "pt",
+                              back_callback: str = "menu:bus") -> InlineKeyboardMarkup:
     if is_fav:
         fav_button = InlineKeyboardButton(t("kb_unfavorite", lang), callback_data=f"fav:remove:bus:{stop_id}")
     else:
         fav_button = InlineKeyboardButton(t("kb_favorite", lang), callback_data=f"fav:add:bus:{stop_id}")
+    back_label = t("kb_back", lang) if back_callback != "menu:bus" else t("kb_back_menu", lang)
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(t("kb_refresh", lang), callback_data=f"bus:stop:{stop_id}")],
         [
@@ -103,7 +106,7 @@ def bus_stop_actions_keyboard(stop_id: str, is_fav: bool = False, lang: str = "p
         ],
         [
             fav_button,
-            InlineKeyboardButton(t("kb_back_menu", lang), callback_data="menu:bus"),
+            InlineKeyboardButton(back_label, callback_data=back_callback),
         ],
     ])
 
@@ -187,11 +190,14 @@ def metro_station_results_keyboard(stations: list[dict], lang: str = "pt") -> In
     return InlineKeyboardMarkup(buttons)
 
 
-def metro_station_actions_keyboard(station_name: str, is_fav: bool = False, lang: str = "pt") -> InlineKeyboardMarkup:
+def metro_station_actions_keyboard(station_name: str, is_fav: bool = False,
+                                    lang: str = "pt",
+                                    back_callback: str = "menu:metro") -> InlineKeyboardMarkup:
     if is_fav:
         fav_button = InlineKeyboardButton(t("kb_unfavorite", lang), callback_data=f"fav:remove:metro:{station_name}")
     else:
         fav_button = InlineKeyboardButton(t("kb_favorite", lang), callback_data=f"fav:add:metro:{station_name}")
+    back_label = t("kb_back", lang) if back_callback != "menu:metro" else t("kb_back_menu", lang)
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(t("kb_refresh", lang), callback_data=f"metro:station:{station_name}")],
         [
@@ -200,7 +206,7 @@ def metro_station_actions_keyboard(station_name: str, is_fav: bool = False, lang
         ],
         [
             fav_button,
-            InlineKeyboardButton(t("kb_back_menu", lang), callback_data="menu:metro"),
+            InlineKeyboardButton(back_label, callback_data=back_callback),
         ],
     ])
 
@@ -300,11 +306,14 @@ def metrobus_stop_results_keyboard(stops: list[dict], lang: str = "pt") -> Inlin
     return InlineKeyboardMarkup(buttons)
 
 
-def metrobus_stop_actions_keyboard(stop_name: str, is_fav: bool = False, lang: str = "pt") -> InlineKeyboardMarkup:
+def metrobus_stop_actions_keyboard(stop_name: str, is_fav: bool = False,
+                                    lang: str = "pt",
+                                    back_callback: str = "menu:metrobus") -> InlineKeyboardMarkup:
     if is_fav:
         fav_button = InlineKeyboardButton(t("kb_unfavorite", lang), callback_data=f"fav:remove:metrobus:{stop_name}")
     else:
         fav_button = InlineKeyboardButton(t("kb_favorite", lang), callback_data=f"fav:add:metrobus:{stop_name}")
+    back_label = t("kb_back", lang) if back_callback != "menu:metrobus" else t("kb_back_menu", lang)
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(t("kb_refresh", lang), callback_data=f"metrobus:stop:{stop_name}")],
         [
@@ -313,7 +322,7 @@ def metrobus_stop_actions_keyboard(stop_name: str, is_fav: bool = False, lang: s
         ],
         [
             fav_button,
-            InlineKeyboardButton(t("kb_back_menu", lang), callback_data="menu:metrobus"),
+            InlineKeyboardButton(back_label, callback_data=back_callback),
         ],
     ])
 
@@ -386,11 +395,14 @@ def train_station_results_keyboard(stations: list[dict], lang: str = "pt") -> In
     return InlineKeyboardMarkup(buttons)
 
 
-def train_station_actions_keyboard(station_name: str, is_fav: bool = False, lang: str = "pt") -> InlineKeyboardMarkup:
+def train_station_actions_keyboard(station_name: str, is_fav: bool = False,
+                                    lang: str = "pt",
+                                    back_callback: str = "menu:trains") -> InlineKeyboardMarkup:
     if is_fav:
         fav_button = InlineKeyboardButton(t("kb_unfavorite", lang), callback_data=f"fav:remove:train:{station_name}")
     else:
         fav_button = InlineKeyboardButton(t("kb_favorite", lang), callback_data=f"fav:add:train:{station_name}")
+    back_label = t("kb_back", lang) if back_callback != "menu:trains" else t("kb_back_menu", lang)
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(t("kb_refresh", lang), callback_data=f"train:station:{station_name}")],
         [
@@ -399,7 +411,7 @@ def train_station_actions_keyboard(station_name: str, is_fav: bool = False, lang
         ],
         [
             fav_button,
-            InlineKeyboardButton(t("kb_back_menu", lang), callback_data="menu:trains"),
+            InlineKeyboardButton(back_label, callback_data=back_callback),
         ],
     ])
 

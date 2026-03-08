@@ -233,10 +233,11 @@ async def train_station_callback(update: Update,
                 f"\u00e0s {escape_md(cp.OPERATING_HOURS['end'].strftime('%H:%M'))}\\."
             )
 
+        back_cb = context.user_data.get("train_back", "menu:trains")
         await query.edit_message_text(
             text,
             parse_mode="MarkdownV2",
-            reply_markup=train_station_actions_keyboard(station_name, is_fav=is_fav, lang=lang),
+            reply_markup=train_station_actions_keyboard(station_name, is_fav=is_fav, lang=lang, back_callback=back_cb),
         )
     except Exception:
         logger.exception("Error in train_station_callback for %s", station_name)
