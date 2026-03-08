@@ -169,6 +169,32 @@ TRANSLATIONS = {
         "route_no_direct_bus": "_Sem linha direta entre estas paragens_",
         "route_tip_via_metro": "💡 _Tenta planear via uma estação de metro_",
         "route_option": "*Opção {n}:*",
+        # Trip planner
+        "trip_title": "🗺 *Planear viagem*",
+        "trip_ask_origin": "Envia o nome da paragem ou estação de *origem*:\nExemplo: `Bolhão`, `Trindade`, `Campanhã`\n\nOu envia a tua 📍 localização\\.",
+        "trip_ask_dest": "Agora envia o nome da paragem ou estação de *destino*:",
+        "trip_origin_set": "📍 Origem: {emoji} *{name}*",
+        "trip_searching": "🔍 A procurar rotas\\.\\.\\.",
+        "trip_results_title": "🗺 *Viagem planeada*\n",
+        "trip_from_to": "📍 De *{origin}* para *{dest}*\n",
+        "trip_option_header": "*Opção {n}* — ⏱ {time} min",
+        "trip_option_transfers": " \\| 🔄 {transfers} transbordo\\(s\\)",
+        "trip_step_walk": "🚶 Andar {min} min até *{to}*",
+        "trip_step_walk_from": "🚶 Andar {min} min desde *{from_name}*",
+        "trip_step_metro": "🚇 Metro *{line}* — *{from}* → *{to}* \\({min} min\\)",
+        "trip_step_bus": "🚌 Autocarro *{line}* — *{from}* → *{to}* \\({min} min\\)",
+        "trip_step_train": "🚆 Comboio *{line}* — *{from}* → *{to}* \\({min} min\\)",
+        "trip_step_metrobus": "🚍 MetroBus *{line}* — *{from}* → *{to}* \\({min} min\\)",
+        "trip_transfer_at": "🔄 Transbordo em *{station}*",
+        "trip_zones": "🎫 Zonas: {zones}",
+        "trip_no_routes": "❌ Não foram encontradas rotas entre estes locais\\.\n\n💡 _Tenta locais mais conhecidos ou estações de metro\\._",
+        "trip_not_found": "❌ Não encontrei *{query}*\\. Tenta outro nome\\.",
+        "trip_new": "🔄 Nova viagem",
+        "trip_detail": "ℹ️ Detalhes",
+        "trip_use_location": "📍 Usar a minha localização",
+        "trip_total_time": "⏱ *Tempo total:* {min} min",
+        "trip_transfers_count": "🔄 *Transbordos:* {count}",
+        "trip_option_btn": "Opção {n} — {time} min",
         # Keyboard labels
         "kb_buses": "🚌 Autocarros",
         "kb_metro": "🚇 Metro",
@@ -270,8 +296,104 @@ TRANSLATIONS = {
         "kb_tourist_back_menu": "🔙 Menu turístico",
         "kb_tourist_show_map": "📍 Ver no mapa",
         "kb_tourist_tickets": "🎫 Bilhetes",
+        # Zone Calculator
+        "zones_title": (
+            "🎫 *Calculador de Zonas Andante*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Calcula as zonas e preço do bilhete entre duas estações\\.\n\n"
+            "Escolhe uma opção:"
+        ),
+        "zones_ask_origin": "📍 Escreve o nome da estação de *origem*:\n\nExemplo: `Trindade`, `Aeroporto`, `Campanhã`",
+        "zones_ask_dest": "📍 Agora escreve o nome da estação de *destino*:",
+        "zones_origin_set": "📍 Origem: *{name}* \\(zona {zone}\\)",
+        "zones_result": (
+            "🎫 *Resultado do cálculo*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "📍 *Origem:* {origin} \\({origin_zone}\\)\n"
+            "📍 *Destino:* {dest} \\({dest_zone}\\)\n\n"
+            "🔢 *Zonas:* {zones_needed}\n"
+            "💰 *Bilhete ocasional:* {price}\n"
+            "🕐 *Passe diário \\(24h\\):* {day_pass}\n"
+        ),
+        "zones_tip_same": "💡 *Dica:* Viagem dentro da mesma zona\\! O bilhete mais barato é suficiente\\.",
+        "zones_tip_day_pass": "💡 *Dica:* Se fizeres 3\\+ viagens, o passe diário compensa\\!",
+        "zones_tip_airport": "💡 *Dica:* Para o aeroporto, precisas de um bilhete Z4\\. Compra na máquina Andante no aeroporto\\.",
+        "zones_tip_tour": "💡 *Dica:* Para turistas, o Andante Tour \\(3 dias, 15\\.00€\\) cobre todas as zonas\\!",
+        "zones_not_found": "❌ Estação *{name}* não encontrada\\. Tenta outro nome\\.",
+        "zones_map_title": (
+            "🗺 *Mapa de Zonas Andante*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Seleciona uma zona para ver as estações:"
+        ),
+        "zones_zone_detail": "📍 *{zone}* — Estações:\n\n{stations}",
+        "zones_quick_usage": "Uso rápido: `/zonas Trindade Aeroporto`",
+        "kb_zones": "🎫 Zonas",
+        "kb_zones_calculate": "🔢 Calcular zonas",
+        "kb_zones_map": "🗺 Mapa de zonas",
+        "kb_zones_new_calc": "🔄 Novo cálculo",
+        "kb_zones_day_pass": "🕐 Passe diário",
+        "kb_zones_back": "🔙 Menu zonas",
         # No results
         "no_results": "🤔 Não encontrei resultados para *{query}*\\.\n\nTenta pesquisar por:\n• Nome de uma paragem STCP\n• Código de paragem \\(ex: BCM2\\)\n• Nome de estação de metro\n\nOu usa o menu abaixo:",
+        # Commuter
+        "commuter_title": (
+            "🧑‍💼 *Perfil Commuter*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Configura o teu trajeto diário para acesso rápido\\."
+        ),
+        "commuter_no_profile": "Ainda não tens um perfil commuter\\.\nConfigura para acesso rápido ao teu trajeto diário\\!",
+        "commuter_profile_summary": (
+            "🏠 *Casa:* {home}\n"
+            "🏢 *Trabalho:* {work}\n"
+            "🚌 *Modo:* {mode}\n"
+            "⏰ *Ida:* {departure} \\| *Volta:* {return_time}"
+        ),
+        "commuter_ask_home": "🏠 *Onde moras\\?*\n\nEnvia o nome da paragem ou estação mais perto de casa:",
+        "commuter_ask_work": "🏢 *Onde trabalhas\\?*\n\nEnvia o nome da paragem ou estação mais perto do trabalho:",
+        "commuter_ask_mode": "🚌 *Modo de transporte preferido\\?*\n\nEscolhe o teu meio de transporte habitual:",
+        "commuter_ask_departure": "⏰ *Hora de ida\\?*\n\nA que horas costumas sair de casa de manhã\\?\n\nEnvia no formato HH:MM \\(ex: 08:30\\):",
+        "commuter_ask_return": "⏰ *Hora de volta\\?*\n\nA que horas costumas sair do trabalho\\?\n\nEnvia no formato HH:MM \\(ex: 18:00\\):",
+        "commuter_confirm": (
+            "✅ *Perfil configurado\\!*\n\n"
+            "🏠 Casa: *{home}*\n"
+            "🏢 Trabalho: *{work}*\n"
+            "🚌 Modo: *{mode}*\n"
+            "⏰ Ida: *{departure}* \\| Volta: *{return_time}*\n\n"
+            "Usa as ações rápidas abaixo\\!"
+        ),
+        "commuter_deleted": "🗑 Perfil commuter apagado\\.",
+        "commuter_location_not_found": "❌ Não encontrei *{query}*\\. Tenta outro nome\\.",
+        "commuter_invalid_time": "❌ Formato inválido\\. Envia no formato HH:MM \\(ex: 08:30\\)\\.",
+        "commuter_go_work": "🏠→🏢 Ir para o trabalho",
+        "commuter_go_home": "🏢→🏠 Ir para casa",
+        "commuter_my_times": "⏰ Os meus horários",
+        "commuter_edit": "✏️ Editar perfil",
+        "commuter_delete": "🗑 Apagar perfil",
+        "commuter_setup": "🆕 Configurar perfil",
+        "commuter_route_to_work": (
+            "🏠→🏢 *A caminho do trabalho*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "De *{home}* para *{work}*\n"
+            "Modo: {mode}"
+        ),
+        "commuter_route_to_home": (
+            "🏢→🏠 *A caminho de casa*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "De *{work}* para *{home}*\n"
+            "Modo: {mode}"
+        ),
+        "commuter_my_times_msg": (
+            "⏰ *Os meus horários*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "🏠→🏢 Saída de manhã: *{departure}*\n"
+            "🏢→🏠 Saída à tarde: *{return_time}*\n\n"
+            "🏠 Casa: *{home}*\n"
+            "🏢 Trabalho: *{work}*"
+        ),
+        "commuter_mode_metro": "🚇 Metro",
+        "commuter_mode_bus": "🚌 Autocarro",
+        "commuter_mode_any": "🔄 Qualquer",
+        "kb_commuter": "🧑‍💼 Commuter",
     },
     "en": {
         # Start / Welcome
@@ -439,6 +561,32 @@ TRANSLATIONS = {
         "route_no_direct_bus": "_No direct line between these stops_",
         "route_tip_via_metro": "💡 _Try planning via a metro station_",
         "route_option": "*Option {n}:*",
+        # Trip planner
+        "trip_title": "🗺 *Plan trip*",
+        "trip_ask_origin": "Send the name of the *origin* stop or station:\nExample: `Bolhão`, `Trindade`, `Campanhã`\n\nOr send your 📍 location\\.",
+        "trip_ask_dest": "Now send the name of the *destination* stop or station:",
+        "trip_origin_set": "📍 Origin: {emoji} *{name}*",
+        "trip_searching": "🔍 Searching for routes\\.\\.\\.",
+        "trip_results_title": "🗺 *Trip planned*\n",
+        "trip_from_to": "📍 From *{origin}* to *{dest}*\n",
+        "trip_option_header": "*Option {n}* — ⏱ {time} min",
+        "trip_option_transfers": " \\| 🔄 {transfers} transfer\\(s\\)",
+        "trip_step_walk": "🚶 Walk {min} min to *{to}*",
+        "trip_step_walk_from": "🚶 Walk {min} min from *{from_name}*",
+        "trip_step_metro": "🚇 Metro *{line}* — *{from}* → *{to}* \\({min} min\\)",
+        "trip_step_bus": "🚌 Bus *{line}* — *{from}* → *{to}* \\({min} min\\)",
+        "trip_step_train": "🚆 Train *{line}* — *{from}* → *{to}* \\({min} min\\)",
+        "trip_step_metrobus": "🚍 MetroBus *{line}* — *{from}* → *{to}* \\({min} min\\)",
+        "trip_transfer_at": "🔄 Transfer at *{station}*",
+        "trip_zones": "🎫 Zones: {zones}",
+        "trip_no_routes": "❌ No routes found between these locations\\.\n\n💡 _Try well\\-known locations or metro stations\\._",
+        "trip_not_found": "❌ Could not find *{query}*\\. Try another name\\.",
+        "trip_new": "🔄 New trip",
+        "trip_detail": "ℹ️ Details",
+        "trip_use_location": "📍 Use my location",
+        "trip_total_time": "⏱ *Total time:* {min} min",
+        "trip_transfers_count": "🔄 *Transfers:* {count}",
+        "trip_option_btn": "Option {n} — {time} min",
         # Keyboard labels
         "kb_buses": "🚌 Buses",
         "kb_metro": "🚇 Metro",
@@ -540,8 +688,104 @@ TRANSLATIONS = {
         "kb_tourist_back_menu": "🔙 Tourist menu",
         "kb_tourist_show_map": "📍 Show on map",
         "kb_tourist_tickets": "🎫 Tickets",
+        # Zone Calculator
+        "zones_title": (
+            "🎫 *Andante Zone Calculator*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Calculate zones and ticket price between two stations\\.\n\n"
+            "Choose an option:"
+        ),
+        "zones_ask_origin": "📍 Type the name of the *origin* station:\n\nExample: `Trindade`, `Aeroporto`, `Campanhã`",
+        "zones_ask_dest": "📍 Now type the name of the *destination* station:",
+        "zones_origin_set": "📍 Origin: *{name}* \\(zone {zone}\\)",
+        "zones_result": (
+            "🎫 *Calculation Result*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "📍 *Origin:* {origin} \\({origin_zone}\\)\n"
+            "📍 *Destination:* {dest} \\({dest_zone}\\)\n\n"
+            "🔢 *Zones:* {zones_needed}\n"
+            "💰 *Single ticket:* {price}\n"
+            "🕐 *Day pass \\(24h\\):* {day_pass}\n"
+        ),
+        "zones_tip_same": "💡 *Tip:* Travel within the same zone\\! The cheapest ticket is enough\\.",
+        "zones_tip_day_pass": "💡 *Tip:* If you make 3\\+ trips, the day pass is worth it\\!",
+        "zones_tip_airport": "💡 *Tip:* For the airport, you need a Z4 ticket\\. Buy it at the Andante machine at the airport\\.",
+        "zones_tip_tour": "💡 *Tip:* For tourists, the Andante Tour \\(3 days, 15\\.00€\\) covers all zones\\!",
+        "zones_not_found": "❌ Station *{name}* not found\\. Try another name\\.",
+        "zones_map_title": (
+            "🗺 *Andante Zone Map*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Select a zone to see stations:"
+        ),
+        "zones_zone_detail": "📍 *{zone}* — Stations:\n\n{stations}",
+        "zones_quick_usage": "Quick usage: `/zonas Trindade Aeroporto`",
+        "kb_zones": "🎫 Zones",
+        "kb_zones_calculate": "🔢 Calculate zones",
+        "kb_zones_map": "🗺 Zone map",
+        "kb_zones_new_calc": "🔄 New calculation",
+        "kb_zones_day_pass": "🕐 Day pass",
+        "kb_zones_back": "🔙 Zone menu",
         # No results
         "no_results": "🤔 No results found for *{query}*\\.\n\nTry searching for:\n• An STCP bus stop name\n• A stop code \\(e\\.g\\. BCM2\\)\n• A metro station name\n\nOr use the menu below:",
+        # Commuter
+        "commuter_title": (
+            "🧑‍💼 *Commuter Profile*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Set up your daily commute for quick access\\."
+        ),
+        "commuter_no_profile": "You don't have a commuter profile yet\\.\nSet one up for quick access to your daily route\\!",
+        "commuter_profile_summary": (
+            "🏠 *Home:* {home}\n"
+            "🏢 *Work:* {work}\n"
+            "🚌 *Mode:* {mode}\n"
+            "⏰ *Departure:* {departure} \\| *Return:* {return_time}"
+        ),
+        "commuter_ask_home": "🏠 *Where do you live\\?*\n\nSend the name of the stop or station nearest to home:",
+        "commuter_ask_work": "🏢 *Where do you work\\?*\n\nSend the name of the stop or station nearest to work:",
+        "commuter_ask_mode": "🚌 *Preferred transport mode\\?*\n\nChoose your usual means of transport:",
+        "commuter_ask_departure": "⏰ *Departure time\\?*\n\nWhat time do you usually leave home in the morning\\?\n\nSend in HH:MM format \\(e\\.g\\. 08:30\\):",
+        "commuter_ask_return": "⏰ *Return time\\?*\n\nWhat time do you usually leave work\\?\n\nSend in HH:MM format \\(e\\.g\\. 18:00\\):",
+        "commuter_confirm": (
+            "✅ *Profile set up\\!*\n\n"
+            "🏠 Home: *{home}*\n"
+            "🏢 Work: *{work}*\n"
+            "🚌 Mode: *{mode}*\n"
+            "⏰ Departure: *{departure}* \\| Return: *{return_time}*\n\n"
+            "Use the quick actions below\\!"
+        ),
+        "commuter_deleted": "🗑 Commuter profile deleted\\.",
+        "commuter_location_not_found": "❌ Could not find *{query}*\\. Try another name\\.",
+        "commuter_invalid_time": "❌ Invalid format\\. Send in HH:MM format \\(e\\.g\\. 08:30\\)\\.",
+        "commuter_go_work": "🏠→🏢 Go to work",
+        "commuter_go_home": "🏢→🏠 Go home",
+        "commuter_my_times": "⏰ My times",
+        "commuter_edit": "✏️ Edit profile",
+        "commuter_delete": "🗑 Delete profile",
+        "commuter_setup": "🆕 Set up profile",
+        "commuter_route_to_work": (
+            "🏠→🏢 *Going to work*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "From *{home}* to *{work}*\n"
+            "Mode: {mode}"
+        ),
+        "commuter_route_to_home": (
+            "🏢→🏠 *Going home*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "From *{work}* to *{home}*\n"
+            "Mode: {mode}"
+        ),
+        "commuter_my_times_msg": (
+            "⏰ *My times*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "🏠→🏢 Morning departure: *{departure}*\n"
+            "🏢→🏠 Evening departure: *{return_time}*\n\n"
+            "🏠 Home: *{home}*\n"
+            "🏢 Work: *{work}*"
+        ),
+        "commuter_mode_metro": "🚇 Metro",
+        "commuter_mode_bus": "🚌 Bus",
+        "commuter_mode_any": "🔄 Any",
+        "kb_commuter": "🧑‍💼 Commuter",
     },
 }
 

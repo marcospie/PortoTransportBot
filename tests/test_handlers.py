@@ -78,10 +78,12 @@ class TestRouteHandlers:
             AWAITING_ROUTE_ORIGIN: datetime.now(),
         })
 
-        with patch("bot.handlers.routes._resolve_location", new_callable=AsyncMock) as mock_resolve:
+        with patch("bot.handlers.routes.resolve_location") as mock_resolve:
             mock_resolve.return_value = {
                 "type": "metro",
                 "name": "Trindade",
+                "lat": 41.1519,
+                "lon": -8.6099,
                 "lines": ["A", "B"],
             }
 
@@ -94,38 +96,24 @@ class TestRouteHandlers:
         update.message.reply_text.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_route_metro_to_metro_direct(self):
-        """Test direct metro route (same line, no transfer)."""
-        from bot.handlers.routes import _find_metro_route
+    async def test_trip_planner_direct_metro(self):
+        """Test trip planner finds direct metro route (same line)."""
+        from bot.services.trip_planner import plan_trip
 
-        with patch("bot.handlers.routes.STATIONS", {
-            "Trindade": {"lines": ["A", "B"]},
-            "Bolhão": {"lines": ["A"]},
-        }), patch("bot.handlers.routes.METRO_LINES", {
-            "A": {"emoji": "🔵", "name": "Linha Azul"},
-        }):
-            options = _find_metro_route("Trindade", "Bolhão")
-
+        options = plan_trip("Trindade", "Bolhão")
         assert len(options) >= 1
-        assert options[0]["transfers"] == 0
+        assert options[0].transfers == 0
 
     @pytest.mark.asyncio
-    async def test_route_metro_to_metro_transfer(self):
-        """Test metro route requiring a transfer."""
-        from bot.handlers.routes import _find_metro_route
+    async def test_trip_planner_metro_with_transfer(self):
+        """Test trip planner finds metro route with transfer."""
+        from bot.services.trip_planner import plan_trip
 
-        with patch("bot.handlers.routes.STATIONS", {
-            "Senhor de Matosinhos": {"lines": ["A"]},
-            "Trindade": {"lines": ["A", "D"]},
-            "Santo Ovídio": {"lines": ["D"]},
-        }), patch("bot.handlers.routes.METRO_LINES", {
-            "A": {"emoji": "🔵", "name": "Linha Azul"},
-            "D": {"emoji": "🟡", "name": "Linha Amarela"},
-        }):
-            options = _find_metro_route("Senhor de Matosinhos", "Santo Ovídio")
-
+        options = plan_trip("Senhor de Matosinhos", "Santo Ovídio")
         assert len(options) >= 1
-        assert options[0]["transfers"] == 1
+        # At least one option should have a transfer
+        has_transfer = any(o.transfers >= 1 for o in options)
+        assert has_transfer
 
 
 # ===================================================================

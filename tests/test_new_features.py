@@ -206,16 +206,11 @@ class TestRouteInlineAutocomplete:
         update.message.reply_text.assert_called_once()
         call_kwargs = update.message.reply_text.call_args[1]
         kb = call_kwargs["reply_markup"]
-        # Check that inline search button exists
-        has_inline = any(
-            btn.switch_inline_query_current_chat is not None
-            for row in kb.inline_keyboard
-            for btn in row
-        )
-        assert has_inline
+        # Check that keyboard has buttons (location or cancel)
+        assert len(kb.inline_keyboard) >= 1
 
     @pytest.mark.asyncio
-    async def test_route_plan_callback_shows_inline_button(self):
+    async def test_route_plan_callback_shows_keyboard(self):
         from bot.handlers.routes import route_plan_callback
         query = AsyncMock()
         query.data = "route:plan"
@@ -230,12 +225,7 @@ class TestRouteInlineAutocomplete:
         query.edit_message_text.assert_called_once()
         call_kwargs = query.edit_message_text.call_args[1]
         kb = call_kwargs["reply_markup"]
-        has_inline = any(
-            btn.switch_inline_query_current_chat is not None
-            for row in kb.inline_keyboard
-            for btn in row
-        )
-        assert has_inline
+        assert len(kb.inline_keyboard) >= 1
 
     @pytest.mark.asyncio
     async def test_text_input_still_works_as_fallback(self):
@@ -250,9 +240,10 @@ class TestRouteInlineAutocomplete:
             "awaiting_route_origin": datetime.now(),
         }
 
-        with patch("bot.handlers.routes._resolve_location", new_callable=AsyncMock) as mock_resolve:
+        with patch("bot.handlers.routes.resolve_location") as mock_resolve:
             mock_resolve.return_value = {
                 "type": "metro", "name": "Trindade",
+                "lat": 41.1519, "lon": -8.6099,
                 "lines": ["A", "B"],
             }
             result = await handle_route_text_input(update, context)

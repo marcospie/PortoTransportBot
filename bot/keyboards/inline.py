@@ -411,6 +411,29 @@ def train_lines_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
+# --- Trip Planning Keyboards ---
+
+def trip_results_keyboard(options: list, lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build keyboard showing trip route options."""
+    buttons = []
+    for i, opt in enumerate(options[:5]):
+        label = t("trip_option_btn", lang).format(n=i + 1, time=opt.total_time_min)
+        if opt.transfers > 0:
+            label += f" | 🔄{opt.transfers}"
+        buttons.append([InlineKeyboardButton(label, callback_data=f"trip:detail:{i}")])
+    buttons.append([InlineKeyboardButton(t("trip_new", lang), callback_data="plan:route")])
+    buttons.append([InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def trip_detail_keyboard(option_index: int, lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build keyboard for trip detail view."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("trip_new", lang), callback_data="plan:route")],
+        [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
+    ])
+
+
 # --- Alerts Keyboards ---
 
 def alerts_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
@@ -488,4 +511,103 @@ def tourist_tickets_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(t("kb_tourist_back_menu", lang), callback_data="tourist:menu")],
         [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
+    ])
+
+
+# --- Zone Calculator Keyboards ---
+
+def zones_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build the zone calculator main menu."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("kb_zones_calculate", lang), callback_data="zones:calculate")],
+        [InlineKeyboardButton(t("kb_zones_map", lang), callback_data="zones:map")],
+        [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
+    ])
+
+
+def zones_result_keyboard(origin: str, dest: str, lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build keyboard for zone calculation result."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("kb_zones_new_calc", lang), callback_data="zones:calculate")],
+        [InlineKeyboardButton(t("kb_zones_map", lang), callback_data="zones:map")],
+        [InlineKeyboardButton(t("kb_zones_back", lang), callback_data="menu:zones")],
+    ])
+
+
+def zones_map_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build zone map overview with zone buttons."""
+    from bot.services.zones import get_all_zones
+
+    buttons = []
+    row: list[InlineKeyboardButton] = []
+    for zone in get_all_zones():
+        row.append(InlineKeyboardButton(zone, callback_data=f"zones:zone:{zone}"))
+        if len(row) == 3:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+
+    buttons.append([InlineKeyboardButton(t("kb_zones_calculate", lang), callback_data="zones:calculate")])
+    buttons.append([InlineKeyboardButton(t("kb_zones_back", lang), callback_data="menu:zones")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def zone_detail_keyboard(zone: str, lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build keyboard for stations in a specific zone."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("kb_zones_map", lang), callback_data="zones:map")],
+        [InlineKeyboardButton(t("kb_zones_back", lang), callback_data="menu:zones")],
+    ])
+
+
+# --- Commuter Keyboards ---
+
+def commuter_menu_keyboard(has_profile: bool, lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build the commuter profile menu keyboard."""
+    if has_profile:
+        return commuter_quick_actions_keyboard(lang)
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("commuter_setup", lang), callback_data="commuter:setup")],
+        [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
+    ])
+
+
+def commuter_setup_keyboard(step: str, lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build keyboard for each commuter setup step."""
+    buttons = []
+    if step == "home":
+        buttons.append([InlineKeyboardButton(t("kb_cancel", lang), callback_data="commuter:cancel")])
+    elif step == "work":
+        buttons.append([InlineKeyboardButton(t("kb_cancel", lang), callback_data="commuter:cancel")])
+    elif step == "mode":
+        return commuter_mode_keyboard(lang)
+    elif step == "departure":
+        buttons.append([InlineKeyboardButton(t("kb_cancel", lang), callback_data="commuter:cancel")])
+    elif step == "return":
+        buttons.append([InlineKeyboardButton(t("kb_cancel", lang), callback_data="commuter:cancel")])
+    else:
+        buttons.append([InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def commuter_quick_actions_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build quick actions keyboard for users with a commuter profile."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("commuter_go_work", lang), callback_data="commuter:go_work")],
+        [InlineKeyboardButton(t("commuter_go_home", lang), callback_data="commuter:go_home")],
+        [InlineKeyboardButton(t("commuter_my_times", lang), callback_data="commuter:my_times")],
+        [InlineKeyboardButton(t("commuter_edit", lang), callback_data="commuter:setup")],
+        [InlineKeyboardButton(t("commuter_delete", lang), callback_data="commuter:delete")],
+        [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
+    ])
+
+
+def commuter_mode_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build transport mode selection keyboard."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("commuter_mode_metro", lang), callback_data="commuter:mode:metro")],
+        [InlineKeyboardButton(t("commuter_mode_bus", lang), callback_data="commuter:mode:bus")],
+        [InlineKeyboardButton(t("commuter_mode_any", lang), callback_data="commuter:mode:any")],
+        [InlineKeyboardButton(t("kb_cancel", lang), callback_data="commuter:cancel")],
     ])

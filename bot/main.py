@@ -14,7 +14,7 @@ from telegram.ext import (
 
 from bot.config import TELEGRAM_BOT_TOKEN
 from bot.database import init_db, close_db
-from bot.handlers import alerts, bus, favorites, inline, location, metro, metrobus, routes, settings, start, tourist, trains
+from bot.handlers import alerts, bus, commuter, favorites, inline, location, metro, metrobus, routes, settings, start, tourist, trains, trip_planner, zones
 from bot.services.metro import download_gtfs
 from bot.services.stcp import download_stcp_gtfs
 from bot.utils.i18n import get_lang, t
@@ -54,6 +54,8 @@ async def handle_text(update: Update, context) -> None:
         return
 
     # Check if any handler is awaiting input
+    if await commuter.handle_commuter_text_input(update, context):
+        return
     if await routes.handle_route_text_input(update, context):
         return
     if await bus.handle_bus_text_input(update, context):
@@ -61,6 +63,8 @@ async def handle_text(update: Update, context) -> None:
     if await metro.handle_metro_text_input(update, context):
         return
     if await trains.handle_train_text_input(update, context):
+        return
+    if await zones.handle_zones_text_input(update, context):
         return
 
     # If it looks like a stop code (short, uppercase, with numbers)
@@ -166,6 +170,8 @@ async def post_init(application: Application) -> None:
         BotCommand("comboios", "Comboios CP"),
         BotCommand("estacao", "Estacao CP"),
         BotCommand("tourist", "Guia turístico"),
+        BotCommand("commuter", "Perfil commuter"),
+        BotCommand("zonas", "Calculador zonas"),
         BotCommand("alertas", "Alertas de serviço"),
         BotCommand("help", "Ajuda"),
     ]
@@ -183,6 +189,8 @@ async def post_init(application: Application) -> None:
         BotCommand("comboios", "CP Trains"),
         BotCommand("estacao", "CP Station"),
         BotCommand("tourist", "Tourist guide"),
+        BotCommand("commuter", "Commuter profile"),
+        BotCommand("zonas", "Zone calculator"),
         BotCommand("alertas", "Service alerts"),
         BotCommand("help", "Help"),
     ]
@@ -287,8 +295,10 @@ def main() -> None:
     app.add_handler(CommandHandler("alertas", alerts.alertas_command))
     app.add_handler(CommandHandler("tourist", tourist.tourist_command))
     app.add_handler(CommandHandler("metrobus", metrobus.metrobus_command))
+    app.add_handler(CommandHandler("commuter", commuter.commuter_command))
     app.add_handler(CommandHandler("comboios", trains.trains_command))
     app.add_handler(CommandHandler("estacao", trains.estacao_command))
+    app.add_handler(CommandHandler("zonas", zones.zones_command))
 
     # Callback query handlers - menu navigation
     app.add_handler(CallbackQueryHandler(start.main_menu_callback, pattern=r"^menu:main$"))
@@ -347,12 +357,29 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(alerts.alerts_menu_callback, pattern=r"^menu:alerts$"))
     app.add_handler(CallbackQueryHandler(alerts.alerts_filter_callback, pattern=r"^alerts:filter:.+$"))
 
+    # Commuter callbacks
+    app.add_handler(CallbackQueryHandler(commuter.commuter_menu_callback, pattern=r"^menu:commuter$"))
+    app.add_handler(CallbackQueryHandler(commuter.commuter_setup_callback, pattern=r"^commuter:setup$"))
+    app.add_handler(CallbackQueryHandler(commuter.commuter_cancel_callback, pattern=r"^commuter:cancel$"))
+    app.add_handler(CallbackQueryHandler(commuter.commuter_delete_callback, pattern=r"^commuter:delete$"))
+    app.add_handler(CallbackQueryHandler(commuter.commuter_go_work_callback, pattern=r"^commuter:go_work$"))
+    app.add_handler(CallbackQueryHandler(commuter.commuter_go_home_callback, pattern=r"^commuter:go_home$"))
+    app.add_handler(CallbackQueryHandler(commuter.commuter_my_times_callback, pattern=r"^commuter:my_times$"))
+    app.add_handler(CallbackQueryHandler(commuter.commuter_mode_callback, pattern=r"^commuter:mode:.+$"))
+
+    # Zone calculator callbacks
+    app.add_handler(CallbackQueryHandler(zones.zones_menu_callback, pattern=r"^menu:zones$"))
+    app.add_handler(CallbackQueryHandler(zones.zones_calculate_callback, pattern=r"^zones:calculate$"))
+    app.add_handler(CallbackQueryHandler(zones.zones_map_callback, pattern=r"^zones:map$"))
+    app.add_handler(CallbackQueryHandler(zones.zones_zone_callback, pattern=r"^zones:zone:.+$"))
+
     # Nearby refresh callback
     app.add_handler(CallbackQueryHandler(location.nearby_refresh_callback, pattern=r"^nearby:refresh$"))
 
     # Route planning callbacks
     app.add_handler(CallbackQueryHandler(routes.route_plan_callback, pattern=r"^plan:route$"))
     app.add_handler(CallbackQueryHandler(routes.route_plan_callback, pattern=r"^route:plan$"))
+    app.add_handler(CallbackQueryHandler(routes.trip_detail_callback, pattern=r"^trip:detail:\d+$"))
 
     # Favorites callbacks
     app.add_handler(CallbackQueryHandler(favorites.favorites_callback, pattern=r"^menu:favorites$"))
