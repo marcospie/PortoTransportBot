@@ -1,6 +1,8 @@
 """Inline query handler for sharing transport info and autocomplete search."""
 
+import asyncio
 import logging
+import re
 import uuid
 
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
@@ -13,6 +15,9 @@ from bot.services.metrobus import search_stops as search_metrobus_stops
 from bot.utils.formatting import escape_md
 
 logger = logging.getLogger(__name__)
+
+# Pattern for queries that look like bus stop codes
+_CODE_PATTERN = re.compile(r"^[A-Za-z]{2,6}\d{0,2}$")
 
 
 async def inline_query_handler(update: Update,
@@ -143,39 +148,88 @@ async def _add_bus_stop_by_code(stop_code: str, results: list) -> None:
 
 
 async def _add_bus_stops_quick(query: str, results: list) -> None:
-    """Search bus stops by name - quick mode for autocomplete (no real-time data).
+    """Search bus stops by name or code - quick mode for autocomplete.
 
-    Uses local GTFS data for instant results, falls back to API.
+    Uses local GTFS data for instant results, falls back to API,
+    and finally tries direct stop code lookups.
     """
     try:
         # Local fuzzy search first (instant, no API call)
         stops = search_stops_local(query, max_results=8)
         if not stops:
             stops = await stcp.search_stops(query)
-        for stop in stops[:8]:
-            stop_code = stop.get("code", stop.get("stop_id", ""))
-            stop_name = stop.get("name", "")
-            zone = stop.get("zone", "")
 
-            zone_text = f" · Zona {zone}" if zone else ""
+        if stops:
+            for stop in stops[:8]:
+                _append_bus_stop_result(stop, results)
+            return
 
-            # Quick result without real-time data (faster autocomplete)
-            text = (
-                f"🚏 *{escape_md(stop_name)}*  `{escape_md(stop_code)}`\n\n"
-                f"Para ver horários em tempo real, envia `/stop {escape_md(stop_code)}` no chat\\."
-            )
+        # No results from name search — try direct stop code lookup
+        # if the query looks like a stop code (e.g. ASP, BIBG, TRN1)
+        if _CODE_PATTERN.match(query):
+            await _try_stop_code_lookups(query, results)
 
-            results.append(InlineQueryResultArticle(
-                id=str(uuid.uuid4()),
-                title=f"🚌 {stop_name}",
-                description=f"Paragem {stop_code}{zone_text}",
-                input_message_content=InputTextMessageContent(
-                    message_text=text,
-                    parse_mode="MarkdownV2",
-                ),
-            ))
     except Exception:
         logger.exception("Error searching bus stops for query: %s", query)
+
+
+def _append_bus_stop_result(stop: dict, results: list) -> None:
+    """Append a single bus stop to inline results."""
+    stop_code = stop.get("code", stop.get("stop_id", ""))
+    stop_name = stop.get("name", "")
+    zone = stop.get("zone", "")
+    zone_text = f" · Zona {zone}" if zone else ""
+
+    text = (
+        f"🚏 *{escape_md(stop_name)}*  `{escape_md(stop_code)}`\n\n"
+        f"Para ver horários em tempo real, envia `/stop {escape_md(stop_code)}` no chat\\."
+    )
+
+    results.append(InlineQueryResultArticle(
+        id=str(uuid.uuid4()),
+        title=f"🚌 {stop_name}",
+        description=f"Paragem {stop_code}{zone_text}",
+        input_message_content=InputTextMessageContent(
+            message_text=text,
+            parse_mode="MarkdownV2",
+        ),
+    ))
+
+
+async def _try_stop_code_lookups(query: str, results: list) -> None:
+    """Try looking up bus stops by code prefix (e.g. ASP → ASP1, ASP2, ...).
+
+    When GTFS data isn't loaded and the API name search returns nothing,
+    this tries common stop code patterns as a last resort.
+    """
+    code_base = query.strip().upper()
+
+    # If query already ends with a digit, try it directly
+    if code_base[-1].isdigit():
+        candidates = [code_base]
+    else:
+        # Try appending common suffixes: 1, 2, 3, ..., L1, L2
+        candidates = [f"{code_base}{i}" for i in range(1, 7)]
+        candidates.extend([f"{code_base}L{i}" for i in range(1, 3)])
+
+    # Try all candidates concurrently (with short timeout)
+    async def _probe(code: str) -> dict | None:
+        try:
+            data = await stcp.get_stop_real_time(code)
+            name = data.get("stop_name", code)
+            # API returns the code back as name when stop doesn't exist
+            if name and name != code:
+                return {"stop_id": code, "name": name, "code": code, "zone": ""}
+        except Exception:
+            pass
+        return None
+
+    tasks = [_probe(c) for c in candidates]
+    found = await asyncio.gather(*tasks)
+
+    for stop in found:
+        if stop is not None:
+            _append_bus_stop_result(stop, results)
 
 
 def _add_metro_stations_quick(query: str, results: list) -> None:
