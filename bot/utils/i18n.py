@@ -296,6 +296,30 @@ TRANSLATIONS = {
         "kb_tourist_back_menu": "🔙 Menu turístico",
         "kb_tourist_show_map": "📍 Ver no mapa",
         "kb_tourist_tickets": "🎫 Bilhetes",
+        # Events
+        "events_title": (
+            "🎉 *Eventos no Porto*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Descobre eventos no Porto e como chegar de transportes públicos\\.\n"
+            "Escolhe uma categoria:"
+        ),
+        "events_overview": "{emoji} *{title}*\n━━━━━━━━━━━━━━━━\n\nEscolhe um evento:",
+        "events_detail": (
+            "{emoji} *{name}*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "📍 *Local:* {venue}\n"
+            "📅 *Quando:* {date_info}\n"
+            "🚇 *Estação mais próxima:* {station}\n"
+        ),
+        "events_transport_tip": "\n🗺 *Como chegar:*\n{tip}",
+        "events_no_events": "Sem eventos nesta categoria\\.",
+        "kb_events": "🎉 Eventos",
+        "kb_events_football": "⚽ Futebol",
+        "kb_events_festival": "🎉 Festivais",
+        "kb_events_music": "🎵 Música",
+        "kb_events_culture": "🎭 Cultura",
+        "kb_events_all": "📋 Todos",
+        "kb_events_back_menu": "🔙 Menu eventos",
         # Zone Calculator
         "zones_title": (
             "🎫 *Calculador de Zonas Andante*\n"
@@ -394,6 +418,66 @@ TRANSLATIONS = {
         "commuter_mode_bus": "🚌 Autocarro",
         "commuter_mode_any": "🔄 Qualquer",
         "kb_commuter": "🧑‍💼 Commuter",
+        # Accessibility
+        "accessibility_title": (
+            "♿ *Acessibilidade \\- Metro do Porto*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Informação sobre acessibilidade nas estações de metro\\.\n\n"
+            "Todas as estações do Metro do Porto dispõem de elevadores, "
+            "rampas, piso tátil, anúncios sonoros e máquinas acessíveis\\.\n\n"
+            "Escolhe uma opção:"
+        ),
+        "accessibility_overview": (
+            "♿ *Resumo de Acessibilidade*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "✅ *{total}* estações totalmente acessíveis\n"
+            "🔧 *{maintenance}* elevadores em manutenção\n\n"
+            "Todas as estações têm:\n"
+            "• 🛗 Elevador\n"
+            "• ♿ Rampa de acesso\n"
+            "• 🦯 Piso tátil\n"
+            "• 🔊 Anúncios sonoros\n"
+            "• 🎫 Máquinas acessíveis\n"
+            "• 🦽 Espaços para cadeira de rodas"
+        ),
+        "accessibility_station_info": (
+            "♿ *{station}*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "{elevator}\n"
+            "{ramp}\n"
+            "{tactile}\n"
+            "{audio}\n"
+            "{machines}\n"
+            "{wheelchair}\n"
+        ),
+        "accessibility_elevator": "🛗 Elevador: {status}",
+        "accessibility_ramp": "♿ Rampa: {status}",
+        "accessibility_tactile": "🦯 Piso tátil: {status}",
+        "accessibility_audio": "🔊 Anúncios sonoros: {status}",
+        "accessibility_machines": "🎫 Máquinas acessíveis: {status}",
+        "accessibility_wheelchair": "🦽 Espaços cadeira de rodas: {status}",
+        "accessibility_notes": "📝 *Notas:* {notes}",
+        "accessibility_search_prompt": "🔍 Escreve o nome da estação de metro:",
+        "accessibility_not_found": "❌ Estação *{name}* não encontrada\\. Tenta outro nome\\.",
+        "accessibility_status_ok": "✅ Operacional",
+        "accessibility_status_maintenance": "🔧 Em manutenção",
+        "accessibility_status_out": "❌ Fora de serviço",
+        "kb_accessibility": "♿ Acessibilidade",
+        "kb_accessibility_search": "🔍 Pesquisar estação",
+        "kb_accessibility_elevators": "🛗 Estado dos elevadores",
+        # Weather
+        "weather_title": "Meteorologia Porto",
+        "weather_temp": "Temperatura",
+        "weather_rain": "Probabilidade de chuva",
+        "weather_sunrise": "Nascer do sol",
+        "weather_sunset": "Pôr do sol",
+        "weather_tip": "Dica de transporte",
+        "weather_tip_rain": "Chuva provável - prefira o metro",
+        "weather_tip_nice": "Bom tempo - agradável para caminhar",
+        "weather_tip_hot": "Calor - prefira transportes com ar condicionado",
+        "weather_tip_cold": "Frio - abrigue-se nas estações",
+        "weather_disclaimer": "Baseado em médias climáticas, não tempo real.",
+        "kb_weather": "🌤 Meteo",
     },
     "en": {
         # Start / Welcome
@@ -688,6 +772,30 @@ TRANSLATIONS = {
         "kb_tourist_back_menu": "🔙 Tourist menu",
         "kb_tourist_show_map": "📍 Show on map",
         "kb_tourist_tickets": "🎫 Tickets",
+        # Events
+        "events_title": (
+            "🎉 *Events in Porto*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Discover events in Porto and how to get there by public transport\\.\n"
+            "Choose a category:"
+        ),
+        "events_overview": "{emoji} *{title}*\n━━━━━━━━━━━━━━━━\n\nChoose an event:",
+        "events_detail": (
+            "{emoji} *{name}*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "📍 *Venue:* {venue}\n"
+            "📅 *When:* {date_info}\n"
+            "🚇 *Nearest station:* {station}\n"
+        ),
+        "events_transport_tip": "\n🗺 *How to get there:*\n{tip}",
+        "events_no_events": "No events in this category\\.",
+        "kb_events": "🎉 Events",
+        "kb_events_football": "⚽ Football",
+        "kb_events_festival": "🎉 Festivals",
+        "kb_events_music": "🎵 Music",
+        "kb_events_culture": "🎭 Culture",
+        "kb_events_all": "📋 All",
+        "kb_events_back_menu": "🔙 Events menu",
         # Zone Calculator
         "zones_title": (
             "🎫 *Andante Zone Calculator*\n"
@@ -786,6 +894,66 @@ TRANSLATIONS = {
         "commuter_mode_bus": "🚌 Bus",
         "commuter_mode_any": "🔄 Any",
         "kb_commuter": "🧑‍💼 Commuter",
+        # Accessibility
+        "accessibility_title": (
+            "♿ *Accessibility \\- Porto Metro*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Accessibility information for metro stations\\.\n\n"
+            "All Porto Metro stations have elevators, "
+            "ramps, tactile guidance, audio announcements and accessible machines\\.\n\n"
+            "Choose an option:"
+        ),
+        "accessibility_overview": (
+            "♿ *Accessibility Overview*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "✅ *{total}* fully accessible stations\n"
+            "🔧 *{maintenance}* elevators under maintenance\n\n"
+            "All stations have:\n"
+            "• 🛗 Elevator\n"
+            "• ♿ Wheelchair ramp\n"
+            "• 🦯 Tactile guidance\n"
+            "• 🔊 Audio announcements\n"
+            "• 🎫 Accessible ticket machines\n"
+            "• 🦽 Wheelchair spaces"
+        ),
+        "accessibility_station_info": (
+            "♿ *{station}*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "{elevator}\n"
+            "{ramp}\n"
+            "{tactile}\n"
+            "{audio}\n"
+            "{machines}\n"
+            "{wheelchair}\n"
+        ),
+        "accessibility_elevator": "🛗 Elevator: {status}",
+        "accessibility_ramp": "♿ Ramp: {status}",
+        "accessibility_tactile": "🦯 Tactile guidance: {status}",
+        "accessibility_audio": "🔊 Audio announcements: {status}",
+        "accessibility_machines": "🎫 Accessible machines: {status}",
+        "accessibility_wheelchair": "🦽 Wheelchair spaces: {status}",
+        "accessibility_notes": "📝 *Notes:* {notes}",
+        "accessibility_search_prompt": "🔍 Type the name of the metro station:",
+        "accessibility_not_found": "❌ Station *{name}* not found\\. Try another name\\.",
+        "accessibility_status_ok": "✅ Operational",
+        "accessibility_status_maintenance": "🔧 Under maintenance",
+        "accessibility_status_out": "❌ Out of service",
+        "kb_accessibility": "♿ Accessibility",
+        "kb_accessibility_search": "🔍 Search station",
+        "kb_accessibility_elevators": "🛗 Elevator status",
+        # Weather
+        "weather_title": "Porto Weather",
+        "weather_temp": "Temperature",
+        "weather_rain": "Rain probability",
+        "weather_sunrise": "Sunrise",
+        "weather_sunset": "Sunset",
+        "weather_tip": "Transport tip",
+        "weather_tip_rain": "Rain likely - prefer metro",
+        "weather_tip_nice": "Nice weather - pleasant for walking",
+        "weather_tip_hot": "Hot - prefer air-conditioned transport",
+        "weather_tip_cold": "Cold - shelter in stations",
+        "weather_disclaimer": "Based on climate averages, not real-time.",
+        "kb_weather": "🌤 Weather",
     },
 }
 

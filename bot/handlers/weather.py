@@ -1,0 +1,72 @@
+"""Weather handler for Porto transport."""
+
+import logging
+
+from telegram import Update
+from telegram.ext import ContextTypes
+
+from bot.keyboards.inline import weather_keyboard
+from bot.services.weather import get_weather_info, get_transport_tip
+from bot.utils.formatting import escape_md
+from bot.utils.i18n import get_lang, t
+
+logger = logging.getLogger(__name__)
+
+
+def _format_weather_message(lang: str = "pt") -> str:
+    """Format the weather overview message."""
+    info = get_weather_info()
+
+    title = t("weather_title", lang)
+    separator = "\u2501" * 16
+
+    temp_label = t("weather_temp", lang)
+    rain_label = t("weather_rain", lang)
+    sunrise_label = t("weather_sunrise", lang)
+    sunset_label = t("weather_sunset", lang)
+    tip_label = t("weather_tip", lang)
+    disclaimer = t("weather_disclaimer", lang)
+
+    description = info["description_pt"] if lang == "pt" else info["description_en"]
+    tip = get_transport_tip(lang)
+
+    emoji = info["emoji"]
+
+    return (
+        f"{emoji} *{escape_md(title)}*\n"
+        f"{separator}\n\n"
+        f"_{escape_md(description)}_\n\n"
+        f"\U0001f321\ufe0f {escape_md(temp_label)}: *{info['temp_min']}\u00b0C \\- {info['temp_max']}\u00b0C*\n"
+        f"\U0001f327\ufe0f {escape_md(rain_label)}: *{info['rain_prob']}%*\n"
+        f"\U0001f305 {escape_md(sunrise_label)}: *{escape_md(info['sunrise'])}*\n"
+        f"\U0001f307 {escape_md(sunset_label)}: *{escape_md(info['sunset'])}*\n\n"
+        f"\U0001f4a1 {escape_md(tip_label)}: {escape_md(tip)}\n\n"
+        f"_{escape_md(disclaimer)}_"
+    )
+
+
+async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /meteo command - show weather overview for Porto."""
+    lang = get_lang(update)
+    msg = _format_weather_message(lang)
+
+    await update.message.reply_text(
+        msg,
+        parse_mode="MarkdownV2",
+        reply_markup=weather_keyboard(lang),
+    )
+
+
+async def weather_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle menu:weather callback - show weather from menu."""
+    query = update.callback_query
+    await query.answer()
+    lang = get_lang(update)
+
+    msg = _format_weather_message(lang)
+
+    await query.edit_message_text(
+        msg,
+        parse_mode="MarkdownV2",
+        reply_markup=weather_keyboard(lang),
+    )

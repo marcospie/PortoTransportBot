@@ -22,14 +22,17 @@ def main_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
             InlineKeyboardButton(t("kb_plan_route", lang), callback_data="plan:route"),
             InlineKeyboardButton(t("kb_tourist", lang), callback_data="tourist:menu"),
         ],
+        [InlineKeyboardButton(t("kb_events", lang), callback_data="menu:events")],
         [
             InlineKeyboardButton(t("kb_favorites", lang), callback_data="menu:favorites"),
             InlineKeyboardButton(t("kb_settings", lang), callback_data="menu:settings"),
         ],
         [
             InlineKeyboardButton(t("kb_alerts", lang), callback_data="menu:alerts"),
-            InlineKeyboardButton(t("kb_help", lang), callback_data="menu:help"),
+            InlineKeyboardButton(t("kb_accessibility", lang), callback_data="menu:accessibility"),
         ],
+        [InlineKeyboardButton(t("kb_weather", lang), callback_data="menu:weather")],
+        [InlineKeyboardButton(t("kb_help", lang), callback_data="menu:help")],
         [InlineKeyboardButton(t("kb_quick_search", lang),
                               switch_inline_query_current_chat="")],
     ])
@@ -452,6 +455,16 @@ def alerts_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
     ])
 
 
+# --- Weather Keyboards ---
+
+def weather_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build keyboard for the weather view with refresh and back."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("kb_refresh", lang), callback_data="menu:weather")],
+        [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
+    ])
+
+
 # --- Tourist Keyboards ---
 
 def tourist_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
@@ -611,3 +624,73 @@ def commuter_mode_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
         [InlineKeyboardButton(t("commuter_mode_any", lang), callback_data="commuter:mode:any")],
         [InlineKeyboardButton(t("kb_cancel", lang), callback_data="commuter:cancel")],
     ])
+
+
+# --- Accessibility Keyboards ---
+
+def accessibility_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build the accessibility main menu keyboard."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("kb_accessibility_search", lang), callback_data="access:search")],
+        [InlineKeyboardButton(t("kb_accessibility_elevators", lang), callback_data="access:elevators")],
+        [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
+    ])
+
+
+def accessibility_station_keyboard(station_name: str, lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build keyboard for a specific station's accessibility info."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("kb_accessibility_search", lang), callback_data="access:search")],
+        [InlineKeyboardButton(t("kb_accessibility_elevators", lang), callback_data="access:elevators")],
+        [InlineKeyboardButton(t("kb_back", lang), callback_data="menu:accessibility")],
+    ])
+
+
+# --- Events Keyboards ---
+
+def events_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build the events main menu with category buttons."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("kb_events_all", lang), callback_data="events:cat:all")],
+        [InlineKeyboardButton(t("kb_events_football", lang), callback_data="events:cat:football")],
+        [InlineKeyboardButton(t("kb_events_festival", lang), callback_data="events:cat:festival")],
+        [InlineKeyboardButton(t("kb_events_music", lang), callback_data="events:cat:music")],
+        [InlineKeyboardButton(t("kb_events_culture", lang), callback_data="events:cat:culture")],
+        [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
+    ])
+
+
+def events_category_keyboard(events_list: list, lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build keyboard showing events in a category."""
+    from bot.services.events import EVENTS
+
+    buttons = []
+    for event in events_list:
+        idx = EVENTS.index(event)
+        name = event.name_pt if lang == "pt" else event.name_en
+        label = f"{event.emoji} {name}"
+        if len(label) > 55:
+            label = f"{event.emoji} {name[:48]}..."
+        buttons.append([
+            InlineKeyboardButton(label, callback_data=f"events:detail:{idx}")
+        ])
+    buttons.append([InlineKeyboardButton(t("kb_events_back_menu", lang), callback_data="menu:events")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def events_detail_keyboard(event_index: int, category: str, lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build keyboard for event detail view with station button."""
+    from bot.services.events import get_event
+    from bot.services.metro import STATIONS
+
+    event = get_event(event_index)
+    buttons = []
+    if event and event.nearest_station in STATIONS:
+        cb_data = f"metro:station:{event.nearest_station}"
+        if len(cb_data.encode("utf-8")) <= 64:
+            buttons.append([
+                InlineKeyboardButton(t("kb_tourist_show_map", lang), callback_data=cb_data)
+            ])
+    buttons.append([InlineKeyboardButton(t("kb_events_back_menu", lang), callback_data="menu:events")])
+    buttons.append([InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")])
+    return InlineKeyboardMarkup(buttons)

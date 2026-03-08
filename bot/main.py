@@ -14,7 +14,7 @@ from telegram.ext import (
 
 from bot.config import TELEGRAM_BOT_TOKEN
 from bot.database import init_db, close_db
-from bot.handlers import alerts, bus, commuter, favorites, inline, location, metro, metrobus, routes, settings, start, tourist, trains, trip_planner, zones
+from bot.handlers import accessibility, alerts, bus, commuter, events, favorites, inline, location, metro, metrobus, routes, settings, start, tourist, trains, trip_planner, weather, zones
 from bot.services.metro import download_gtfs
 from bot.services.stcp import download_stcp_gtfs
 from bot.utils.i18n import get_lang, t
@@ -65,6 +65,8 @@ async def handle_text(update: Update, context) -> None:
     if await trains.handle_train_text_input(update, context):
         return
     if await zones.handle_zones_text_input(update, context):
+        return
+    if await accessibility.handle_accessibility_text_input(update, context):
         return
 
     # If it looks like a stop code (short, uppercase, with numbers)
@@ -173,6 +175,9 @@ async def post_init(application: Application) -> None:
         BotCommand("commuter", "Perfil commuter"),
         BotCommand("zonas", "Calculador zonas"),
         BotCommand("alertas", "Alertas de serviço"),
+        BotCommand("acessibilidade", "Acessibilidade"),
+        BotCommand("meteo", "Meteorologia"),
+        BotCommand("eventos", "Eventos no Porto"),
         BotCommand("help", "Ajuda"),
     ]
     en_commands = [
@@ -192,6 +197,9 @@ async def post_init(application: Application) -> None:
         BotCommand("commuter", "Commuter profile"),
         BotCommand("zonas", "Zone calculator"),
         BotCommand("alertas", "Service alerts"),
+        BotCommand("acessibilidade", "Accessibility"),
+        BotCommand("meteo", "Weather"),
+        BotCommand("eventos", "Events in Porto"),
         BotCommand("help", "Help"),
     ]
 
@@ -299,6 +307,9 @@ def main() -> None:
     app.add_handler(CommandHandler("comboios", trains.trains_command))
     app.add_handler(CommandHandler("estacao", trains.estacao_command))
     app.add_handler(CommandHandler("zonas", zones.zones_command))
+    app.add_handler(CommandHandler("acessibilidade", accessibility.accessibility_command))
+    app.add_handler(CommandHandler("meteo", weather.weather_command))
+    app.add_handler(CommandHandler("eventos", events.events_command))
 
     # Callback query handlers - menu navigation
     app.add_handler(CallbackQueryHandler(start.main_menu_callback, pattern=r"^menu:main$"))
@@ -353,9 +364,17 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(tourist.tourist_destination_callback, pattern=r"^tourist:dest:.+$"))
     app.add_handler(CallbackQueryHandler(tourist.tourist_tickets_callback, pattern=r"^tourist:tickets$"))
 
+    # Events callbacks
+    app.add_handler(CallbackQueryHandler(events.events_menu_callback, pattern=r"^menu:events$"))
+    app.add_handler(CallbackQueryHandler(events.events_category_callback, pattern=r"^events:cat:.+$"))
+    app.add_handler(CallbackQueryHandler(events.events_detail_callback, pattern=r"^events:detail:\d+$"))
+
     # Alerts callbacks
     app.add_handler(CallbackQueryHandler(alerts.alerts_menu_callback, pattern=r"^menu:alerts$"))
     app.add_handler(CallbackQueryHandler(alerts.alerts_filter_callback, pattern=r"^alerts:filter:.+$"))
+
+    # Weather callbacks
+    app.add_handler(CallbackQueryHandler(weather.weather_menu_callback, pattern=r"^menu:weather$"))
 
     # Commuter callbacks
     app.add_handler(CallbackQueryHandler(commuter.commuter_menu_callback, pattern=r"^menu:commuter$"))
@@ -372,6 +391,12 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(zones.zones_calculate_callback, pattern=r"^zones:calculate$"))
     app.add_handler(CallbackQueryHandler(zones.zones_map_callback, pattern=r"^zones:map$"))
     app.add_handler(CallbackQueryHandler(zones.zones_zone_callback, pattern=r"^zones:zone:.+$"))
+
+    # Accessibility callbacks
+    app.add_handler(CallbackQueryHandler(accessibility.accessibility_menu_callback, pattern=r"^menu:accessibility$"))
+    app.add_handler(CallbackQueryHandler(accessibility.accessibility_station_callback, pattern=r"^access:station:.+$"))
+    app.add_handler(CallbackQueryHandler(accessibility.accessibility_search_callback, pattern=r"^access:search$"))
+    app.add_handler(CallbackQueryHandler(accessibility.accessibility_elevators_callback, pattern=r"^access:elevators$"))
 
     # Nearby refresh callback
     app.add_handler(CallbackQueryHandler(location.nearby_refresh_callback, pattern=r"^nearby:refresh$"))
