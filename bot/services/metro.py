@@ -16,7 +16,7 @@ from pathlib import Path
 import aiohttp
 import aiofiles
 
-from bot.config import GTFS_DIR, GTFS_METRO_URL, METRO_LINES
+from bot.config import GTFS_DIR, GTFS_METRO_URL, GTFS_METRO_URLS, METRO_LINES
 from bot.utils.cache import TTLCache
 
 logger = logging.getLogger(__name__)
@@ -140,35 +140,47 @@ _gtfs_stop_times: dict[str, list[dict]] = {}
 
 
 async def download_gtfs() -> bool:
-    """Download and extract GTFS data from Porto open data portal."""
+    """Download and extract GTFS data from Porto open data portal.
+
+    Tries multiple URLs in order, falling back to older files if the newest
+    is empty or unavailable (the portal sometimes has 0-byte uploads).
+    """
     global _gtfs_loaded
     GTFS_DIR.mkdir(parents=True, exist_ok=True)
     zip_path = GTFS_DIR / "metro_porto.zip"
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(GTFS_METRO_URL,
-                                   timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                if resp.status != 200:
-                    logger.warning("Failed to download GTFS: HTTP %d", resp.status)
-                    return False
-                content = await resp.read()
-                if len(content) < 100:
-                    logger.warning("GTFS download too small, likely empty")
-                    return False
+    urls = GTFS_METRO_URLS if GTFS_METRO_URLS else [GTFS_METRO_URL]
 
-        async with aiofiles.open(zip_path, "wb") as f:
-            await f.write(content)
+    for url in urls:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url,
+                                       timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    if resp.status != 200:
+                        logger.warning("GTFS download HTTP %d from %s", resp.status, url)
+                        continue
+                    content = await resp.read()
+                    if len(content) < 1000:
+                        logger.warning("GTFS file too small (%d bytes), skipping: %s",
+                                       len(content), url)
+                        continue
 
-        _extract_gtfs(zip_path)
-        _build_station_mapping()
-        _gtfs_loaded = True
-        logger.info("GTFS data loaded successfully (%d stops, %d trips, %d services)",
-                     len(_gtfs_stops), len(_gtfs_trips), len(_gtfs_calendar))
-        return True
-    except Exception:
-        logger.exception("Error downloading GTFS data")
-        return False
+            async with aiofiles.open(zip_path, "wb") as f:
+                await f.write(content)
+
+            _extract_gtfs(zip_path)
+            _build_station_mapping()
+            _gtfs_loaded = True
+            logger.info("GTFS data loaded successfully from %s "
+                         "(%d stops, %d trips, %d services)",
+                         url, len(_gtfs_stops), len(_gtfs_trips), len(_gtfs_calendar))
+            return True
+        except Exception:
+            logger.exception("Error downloading GTFS from %s", url)
+            continue
+
+    logger.error("All GTFS download URLs failed")
+    return False
 
 
 def _extract_gtfs(zip_path: Path) -> None:

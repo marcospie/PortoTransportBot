@@ -11,12 +11,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 GTFS_DIR = DATA_DIR / "gtfs"
 
-GTFS_METRO_URL = (
+GTFS_METRO_URLS = [
+    # Try newest first; Feb 2026 file is currently 0 bytes on the portal
     "https://opendata.porto.digital/dataset/"
     "15f22603-a216-492a-ab1c-40b1d8aa2f08/resource/"
     "a8375fac-8ded-4858-9c45-83f9be814900/download/"
-    "horarios_gtfs_mdp_20_02_2026.zip"
-)
+    "horarios_gtfs_mdp_20_02_2026.zip",
+    # Sept 2024 — latest working file (388 KB)
+    "https://opendata.porto.digital/dataset/"
+    "15f22603-a216-492a-ab1c-40b1d8aa2f08/resource/"
+    "f592c53a-e669-4cac-9e28-ab84b87e7f6b/download/"
+    "horarios_gtfs_09_09_2024.zip",
+]
+# Legacy single-URL alias
+GTFS_METRO_URL = GTFS_METRO_URLS[0]
 
 GTFS_STCP_URL = (
     "https://opendata.porto.digital/dataset/"
