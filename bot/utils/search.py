@@ -63,6 +63,10 @@ def normalize(text: str) -> str:
         # Expand abbreviations both ways
         if token in _ABBREVIATIONS:
             expanded_tokens.extend(_ABBREVIATIONS[token].split())
+        elif token + "." in _ABBREVIATIONS:
+            # User typed "d" instead of "d." — treat as abbreviation
+            expanded_tokens.extend(_ABBREVIATIONS[token + "."].split())
+            expanded_tokens.append(token + ".")
         else:
             # Check if token is the expanded form of an abbreviation
             for abbr, expansions in _ABBREVIATIONS.items():
@@ -77,6 +81,17 @@ def normalize(text: str) -> str:
             expanded_tokens.append(_ARABIC_TO_ROMAN[token])
 
     return " ".join(expanded_tokens)
+
+
+def normalize_simple(text: str) -> str:
+    """Normalize without expanding abbreviations — just lowercase + strip accents."""
+    text = text.strip()
+    if not text:
+        return ""
+    lower = text.lower()
+    stripped = _strip_accents(lower)
+    cleaned = re.sub(r"[''`()\[\].!]", "", stripped)
+    return " ".join(cleaned.split())
 
 
 def _strip_accents(text: str) -> str:
@@ -110,28 +125,52 @@ def match_score(query: str, name: str) -> float:
         return 80 + 15 * (len(norm_query) / len(norm_name))
 
     # Token-based matching
+    # Use original query tokens (before abbreviation expansion) for ratio calc
+    orig_query = normalize_simple(query)
+    orig_query_tokens = set(orig_query.split())
     query_tokens = set(norm_query.split())
     name_tokens = set(norm_name.split())
 
     if not query_tokens:
         return 0
 
-    # Count how many query tokens are found in the name (exact or substring)
+    # Count how many ORIGINAL query tokens have at least one matching
+    # expanded form in the name tokens
     matched = 0
-    for qt in query_tokens:
-        for nt in name_tokens:
-            if qt == nt:
-                matched += 1
-                break
-            # Substring match only if both tokens are long enough (>=3 chars)
-            elif len(qt) >= 3 and len(nt) >= 3 and (qt in nt or nt in qt):
-                matched += 0.7
-                break
+    for oqt in orig_query_tokens:
+        # Gather this token's expanded forms (including itself)
+        expanded = {oqt}
+        if oqt in _ABBREVIATIONS:
+            expanded.update(_ABBREVIATIONS[oqt].split())
+        elif oqt + "." in _ABBREVIATIONS:
+            expanded.update(_ABBREVIATIONS[oqt + "."].split())
+            expanded.add(oqt + ".")
+        else:
+            for abbr, expansions in _ABBREVIATIONS.items():
+                if oqt in expansions.split():
+                    expanded.add(abbr.rstrip("."))
+                    expanded.add(abbr)
+        # Roman/Arabic conversions
+        if oqt in _ROMAN_TO_ARABIC:
+            expanded.add(_ROMAN_TO_ARABIC[oqt])
+        elif oqt in _ARABIC_TO_ROMAN:
+            expanded.add(_ARABIC_TO_ROMAN[oqt])
+
+        best = 0.0
+        for eqt in expanded:
+            for nt in name_tokens:
+                if eqt == nt:
+                    best = max(best, 1.0)
+                elif len(eqt) >= 3 and len(nt) >= 3 and (eqt in nt or nt in eqt):
+                    best = max(best, 0.7)
+                elif len(eqt) <= 2 and len(nt) >= 2 and nt.startswith(eqt):
+                    best = max(best, 0.5)
+        matched += best
 
     if matched == 0:
         return 0
 
-    ratio = matched / len(query_tokens)
+    ratio = matched / len(orig_query_tokens)
 
     if ratio >= 1.0:
         # All tokens matched
