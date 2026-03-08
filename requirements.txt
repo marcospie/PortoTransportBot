@@ -6,6 +6,7 @@ aiofiles==24.1.0
 asyncpg==0.30.0
 flask>=3.0.0
 requests>=2.31.0
-# Optional: enables real-time metro departures via metrodoporto.pt scraping
-# After pip install, also run: playwright install chromium
-playwright>=1.40.0
+# Station data is now fetched via aiohttp from Metro do Porto JS files.
+# Playwright/Chromium is no longer needed (the trip planner uses a
+# referrer-restricted Google Maps API key that cannot be called server-side,
+# and Chromium does not work through corporate/egress proxies).
