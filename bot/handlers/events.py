@@ -1,4 +1,4 @@
-"""Handler for Events — upcoming events in Porto with transport info."""
+"""Handler for Events — today's events in Porto with transport info."""
 
 import logging
 
@@ -6,11 +6,14 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from bot.keyboards.inline import (
-    events_menu_keyboard,
+    events_today_keyboard,
     events_category_keyboard,
     events_detail_keyboard,
+    events_menu_keyboard,
 )
 from bot.services.events import (
+    get_todays_events,
+    get_upcoming_events,
     get_events,
     get_event,
     EVENT_CATEGORIES,
@@ -26,12 +29,13 @@ logger = logging.getLogger(__name__)
 # ===================================================================
 
 async def events_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /eventos command — show events menu."""
+    """Handle /eventos command — show today's events."""
     lang = get_lang(update)
+    text, keyboard = _build_today_view(lang)
     await update.message.reply_text(
-        t("events_title", lang),
+        text,
         parse_mode="MarkdownV2",
-        reply_markup=events_menu_keyboard(lang),
+        reply_markup=keyboard,
     )
 
 
@@ -40,7 +44,20 @@ async def events_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 # ===================================================================
 
 async def events_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show the events main menu (from inline button)."""
+    """Show today's events (from inline button)."""
+    query = update.callback_query
+    await query.answer()
+    lang = get_lang(update)
+    text, keyboard = _build_today_view(lang)
+    await query.edit_message_text(
+        text,
+        parse_mode="MarkdownV2",
+        reply_markup=keyboard,
+    )
+
+
+async def events_categories_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show category filter menu."""
     query = update.callback_query
     await query.answer()
     lang = get_lang(update)
@@ -128,3 +145,25 @@ async def events_detail_callback(update: Update, context: ContextTypes.DEFAULT_T
         parse_mode="MarkdownV2",
         reply_markup=events_detail_keyboard(event_index, event.category, lang),
     )
+
+
+# ===================================================================
+# Helpers
+# ===================================================================
+
+def _build_today_view(lang: str):
+    """Build text + keyboard for today's events view."""
+    today = get_todays_events()
+    upcoming = get_upcoming_events()
+
+    if today:
+        text = t("events_today", lang)
+        keyboard = events_today_keyboard(today, lang, show_more=bool(upcoming))
+    elif upcoming:
+        text = t("events_none_today", lang)
+        keyboard = events_today_keyboard(upcoming, lang, upcoming=True)
+    else:
+        text = t("events_none_upcoming", lang)
+        keyboard = events_menu_keyboard(lang)
+
+    return text, keyboard

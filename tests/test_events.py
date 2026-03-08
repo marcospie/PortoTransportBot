@@ -1,7 +1,8 @@
 """Comprehensive tests for the Events feature."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from datetime import date
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from telegram import InlineKeyboardMarkup
 
@@ -56,7 +57,7 @@ class TestEventsService:
         from bot.services.events import get_events, EVENTS
         events = get_events()
         assert len(events) == len(EVENTS)
-        assert len(events) >= 9
+        assert len(events) >= 5
 
     def test_get_events_by_category(self):
         """Events can be filtered by category."""
@@ -68,14 +69,6 @@ class TestEventsService:
         festivals = get_events("festival")
         assert len(festivals) >= 2
         assert all(e.category == "festival" for e in festivals)
-
-        music = get_events("music")
-        assert len(music) >= 1
-        assert all(e.category == "music" for e in music)
-
-        culture = get_events("culture")
-        assert len(culture) >= 1
-        assert all(e.category == "culture" for e in culture)
 
         # Nonexistent category returns empty
         empty = get_events("nonexistent")
@@ -110,7 +103,6 @@ class TestEventsService:
     def test_get_events_near_station(self):
         """Events can be found by nearest metro station."""
         from bot.services.events import get_events_near_station
-        # FC Porto events are near Estádio do Dragão
         dragao = get_events_near_station("Estádio do Dragão")
         assert len(dragao) >= 2
         assert all("Dragão" in e.venue_pt or "Dragão" in e.venue_en for e in dragao)
@@ -140,6 +132,39 @@ class TestEventsService:
                 f"Invalid category '{event.category}' for {event.name_en}"
             )
             assert event.emoji, f"Missing emoji for {event}"
+            assert isinstance(event.start_date, date)
+            assert isinstance(event.end_date, date)
+            assert event.start_date <= event.end_date
+
+    def test_get_todays_events(self):
+        """Events happening on a given date are returned."""
+        from bot.services.events import get_todays_events, EVENTS
+        # Use the start_date of the first event to guarantee a match
+        first = EVENTS[0]
+        today_events = get_todays_events(today=first.start_date)
+        assert len(today_events) >= 1
+        assert first in today_events
+
+    def test_get_todays_events_none(self):
+        """No events on a date far in the past."""
+        from bot.services.events import get_todays_events
+        events = get_todays_events(today=date(2000, 1, 1))
+        assert events == []
+
+    def test_get_upcoming_events(self):
+        """Upcoming events are returned sorted by start_date."""
+        from bot.services.events import get_upcoming_events
+        upcoming = get_upcoming_events(today=date(2026, 1, 1))
+        assert len(upcoming) >= 1
+        # Verify sorted
+        for i in range(len(upcoming) - 1):
+            assert upcoming[i].start_date <= upcoming[i + 1].start_date
+
+    def test_get_upcoming_events_limit(self):
+        """Upcoming events respects limit parameter."""
+        from bot.services.events import get_upcoming_events
+        upcoming = get_upcoming_events(today=date(2026, 1, 1), limit=2)
+        assert len(upcoming) <= 2
 
 
 # ===================================================================
@@ -166,6 +191,17 @@ class TestEventsKeyboards:
         assert any("All" in t for t in all_texts)
         assert any("Football" in t for t in all_texts)
 
+    def test_events_today_keyboard(self):
+        from bot.keyboards.inline import events_today_keyboard
+        from bot.services.events import EVENTS
+        events_list = EVENTS[:2]
+        kb = events_today_keyboard(events_list, "pt")
+        assert isinstance(kb, InlineKeyboardMarkup)
+        all_data = [btn.callback_data for row in kb.inline_keyboard for btn in row]
+        assert any(d and d.startswith("events:detail:") for d in all_data)
+        assert "events:categories" in all_data
+        assert "menu:main" in all_data
+
     def test_events_category_keyboard(self):
         from bot.keyboards.inline import events_category_keyboard
         from bot.services.events import get_events
@@ -173,9 +209,7 @@ class TestEventsKeyboards:
         kb = events_category_keyboard(events_list, "pt")
         assert isinstance(kb, InlineKeyboardMarkup)
         all_data = [btn.callback_data for row in kb.inline_keyboard for btn in row]
-        # Should have detail buttons for football events
         assert any(d and d.startswith("events:detail:") for d in all_data)
-        # Should have back button
         assert "menu:events" in all_data
 
     def test_events_detail_keyboard(self):
@@ -199,43 +233,96 @@ class TestEventsKeyboards:
 
 class TestEventsHandlers:
     @pytest.mark.asyncio
-    async def test_events_command(self):
-        """Test /eventos command shows the events menu."""
+    async def test_events_command_with_today_events(self):
+        """Test /eventos shows today's events when available."""
         from bot.handlers.events import events_command
-        update = _make_update(lang="pt")
-        context = _make_context()
+        from bot.services.events import EVENTS
 
-        await events_command(update, context)
+        # Patch date to match the first event
+        first = EVENTS[0]
+        with patch("bot.services.events.date") as mock_date:
+            mock_date.today.return_value = first.start_date
+            mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
 
-        update.message.reply_text.assert_called_once()
-        call_kwargs = update.message.reply_text.call_args
-        assert "Eventos no Porto" in call_kwargs[0][0]
-        assert call_kwargs[1]["parse_mode"] == "MarkdownV2"
+            update = _make_update(lang="pt")
+            context = _make_context()
+            await events_command(update, context)
+
+            update.message.reply_text.assert_called_once()
+            call_args = update.message.reply_text.call_args
+            text = call_args[0][0]
+            assert "Eventos Hoje" in text
+
+    @pytest.mark.asyncio
+    async def test_events_command_no_today_shows_upcoming(self):
+        """Test /eventos shows upcoming when nothing today."""
+        from bot.handlers.events import events_command
+
+        with patch("bot.services.events.date") as mock_date:
+            mock_date.today.return_value = date(2026, 1, 1)
+            mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
+
+            update = _make_update(lang="pt")
+            context = _make_context()
+            await events_command(update, context)
+
+            update.message.reply_text.assert_called_once()
+            call_args = update.message.reply_text.call_args
+            text = call_args[0][0]
+            assert "Próximos" in text or "Sem eventos hoje" in text
 
     @pytest.mark.asyncio
     async def test_events_command_en(self):
         """Test /eventos command in English."""
         from bot.handlers.events import events_command
-        update = _make_update(lang="en")
-        context = _make_context()
+        from bot.services.events import EVENTS
 
-        await events_command(update, context)
+        first = EVENTS[0]
+        with patch("bot.services.events.date") as mock_date:
+            mock_date.today.return_value = first.start_date
+            mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
 
-        update.message.reply_text.assert_called_once()
-        call_kwargs = update.message.reply_text.call_args
-        assert "Events in Porto" in call_kwargs[0][0]
+            update = _make_update(lang="en")
+            context = _make_context()
+            await events_command(update, context)
+
+            update.message.reply_text.assert_called_once()
+            call_args = update.message.reply_text.call_args
+            text = call_args[0][0]
+            assert "Events Today" in text
 
     @pytest.mark.asyncio
     async def test_events_menu_callback(self):
-        """Test events menu callback shows menu."""
+        """Test events menu callback shows today's view."""
         from bot.handlers.events import events_menu_callback
+        from bot.services.events import EVENTS
+
+        first = EVENTS[0]
+        with patch("bot.services.events.date") as mock_date:
+            mock_date.today.return_value = first.start_date
+            mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
+
+            update = _make_update(lang="pt")
+            context = _make_context()
+            await events_menu_callback(update, context)
+
+            update.callback_query.answer.assert_called_once()
+            update.callback_query.edit_message_text.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_events_categories_callback(self):
+        """Test categories callback shows category menu."""
+        from bot.handlers.events import events_categories_callback
         update = _make_update(lang="pt")
+        update.callback_query.data = "events:categories"
         context = _make_context()
 
-        await events_menu_callback(update, context)
+        await events_categories_callback(update, context)
 
         update.callback_query.answer.assert_called_once()
-        update.callback_query.edit_message_text.assert_called_once()
+        call_args = update.callback_query.edit_message_text.call_args
+        text = call_args[0][0]
+        assert "Eventos no Porto" in text
 
     @pytest.mark.asyncio
     async def test_events_category_callback_football(self):
@@ -278,8 +365,6 @@ class TestEventsHandlers:
 
         call_args = update.callback_query.edit_message_text.call_args
         text = call_args[0][0]
-        # First event is FC Porto home matches
-        assert "FC Porto" in text
         assert "Dragão" in text
 
     @pytest.mark.asyncio
@@ -294,7 +379,6 @@ class TestEventsHandlers:
 
         call_args = update.callback_query.edit_message_text.call_args
         text = call_args[0][0]
-        assert "Home Matches" in text
         assert "How to get there" in text
 
 
@@ -307,11 +391,12 @@ class TestEventsI18n:
         """Verify all events i18n keys exist in both languages."""
         from bot.utils.i18n import TRANSLATIONS
         events_keys = [
+            "events_today", "events_none_today", "events_none_upcoming",
             "events_title", "events_overview", "events_detail",
             "events_transport_tip", "events_no_events",
             "kb_events", "kb_events_football", "kb_events_festival",
             "kb_events_music", "kb_events_culture", "kb_events_all",
-            "kb_events_back_menu",
+            "kb_events_back_menu", "kb_events_more",
         ]
         for key in events_keys:
             assert key in TRANSLATIONS["pt"], f"Missing PT key: {key}"

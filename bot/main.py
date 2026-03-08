@@ -366,6 +366,7 @@ def main() -> None:
 
     # Events callbacks
     app.add_handler(CallbackQueryHandler(events.events_menu_callback, pattern=r"^menu:events$"))
+    app.add_handler(CallbackQueryHandler(events.events_categories_callback, pattern=r"^events:categories$"))
     app.add_handler(CallbackQueryHandler(events.events_category_callback, pattern=r"^events:cat:.+$"))
     app.add_handler(CallbackQueryHandler(events.events_detail_callback, pattern=r"^events:detail:\d+$"))
 

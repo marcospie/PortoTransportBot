@@ -297,6 +297,21 @@ TRANSLATIONS = {
         "kb_tourist_show_map": "📍 Ver no mapa",
         "kb_tourist_tickets": "🎫 Bilhetes",
         # Events
+        "events_today": (
+            "🎉 *Eventos Hoje*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "A acontecer agora no Porto:"
+        ),
+        "events_none_today": (
+            "🎉 *Eventos no Porto*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Sem eventos hoje\\. Próximos eventos:"
+        ),
+        "events_none_upcoming": (
+            "🎉 *Eventos no Porto*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Sem eventos programados de momento\\."
+        ),
         "events_title": (
             "🎉 *Eventos no Porto*\n"
             "━━━━━━━━━━━━━━━━\n\n"
@@ -320,6 +335,7 @@ TRANSLATIONS = {
         "kb_events_culture": "🎭 Cultura",
         "kb_events_all": "📋 Todos",
         "kb_events_back_menu": "🔙 Menu eventos",
+        "kb_events_more": "📅 Ver mais eventos",
         # Zone Calculator
         "zones_title": (
             "🎫 *Calculador de Zonas Andante*\n"
@@ -773,6 +789,21 @@ TRANSLATIONS = {
         "kb_tourist_show_map": "📍 Show on map",
         "kb_tourist_tickets": "🎫 Tickets",
         # Events
+        "events_today": (
+            "🎉 *Events Today*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Happening now in Porto:"
+        ),
+        "events_none_today": (
+            "🎉 *Events in Porto*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "No events today\\. Coming up next:"
+        ),
+        "events_none_upcoming": (
+            "🎉 *Events in Porto*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "No events scheduled at the moment\\."
+        ),
         "events_title": (
             "🎉 *Events in Porto*\n"
             "━━━━━━━━━━━━━━━━\n\n"
@@ -796,6 +827,7 @@ TRANSLATIONS = {
         "kb_events_culture": "🎭 Culture",
         "kb_events_all": "📋 All",
         "kb_events_back_menu": "🔙 Events menu",
+        "kb_events_more": "📅 More events",
         # Zone Calculator
         "zones_title": (
             "🎫 *Andante Zone Calculator*\n"

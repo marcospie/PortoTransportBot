@@ -648,8 +648,28 @@ def accessibility_station_keyboard(station_name: str, lang: str = "pt") -> Inlin
 
 # --- Events Keyboards ---
 
+def events_today_keyboard(events_list: list, lang: str = "pt", show_more: bool = False, upcoming: bool = False) -> InlineKeyboardMarkup:
+    """Build keyboard showing today's (or upcoming) events."""
+    from bot.services.events import EVENTS
+
+    buttons = []
+    for event in events_list:
+        idx = EVENTS.index(event)
+        name = event.name_pt if lang == "pt" else event.name_en
+        date_info = event.date_info_pt if lang == "pt" else event.date_info_en
+        label = f"{event.emoji} {name} — {date_info}"
+        if len(label) > 55:
+            label = f"{event.emoji} {name[:48]}..."
+        buttons.append([
+            InlineKeyboardButton(label, callback_data=f"events:detail:{idx}")
+        ])
+    buttons.append([InlineKeyboardButton(t("kb_events_more", lang), callback_data="events:categories")])
+    buttons.append([InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")])
+    return InlineKeyboardMarkup(buttons)
+
+
 def events_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
-    """Build the events main menu with category buttons."""
+    """Build the events category menu."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(t("kb_events_all", lang), callback_data="events:cat:all")],
         [InlineKeyboardButton(t("kb_events_football", lang), callback_data="events:cat:football")],
