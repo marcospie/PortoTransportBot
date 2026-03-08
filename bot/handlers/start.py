@@ -54,12 +54,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if payload.startswith("stop_"):
             stop_id = payload[5:].upper()
             from bot.handlers.bus import _send_stop_realtime
-            await _send_stop_realtime(update.message, stop_id, context)
+            await _send_stop_realtime(update.message, stop_id, context, lang=lang)
             return
         if payload.startswith("station_"):
             station_name = payload[8:]
             from bot.handlers.metro import _search_and_show_stations
-            await _search_and_show_stations(update.message, station_name, context)
+            await _search_and_show_stations(update.message, station_name, context, lang=lang)
             return
 
     # Send persistent reply keyboard
@@ -84,25 +84,22 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text(
             text,
             parse_mode="MarkdownV2",
-            reply_markup=favorites_keyboard(favs),
+            reply_markup=favorites_keyboard(favs, lang=lang),
         )
     elif not context.user_data.get("onboarded"):
         # First-time user - show onboarding
         context.user_data["onboarded"] = True
         await update.message.reply_text(
-            "👋 Olá\\! Sou o *Porto Transport Bot*\\.\n"
-            "━━━━━━━━━━━━━━━━\n\n"
-            "Consulta transportes públicos do Porto em tempo real\\.\n\n"
-            "Para começar, escolhe uma opção:",
+            t("onboard_welcome", lang),
             parse_mode="MarkdownV2",
-            reply_markup=onboarding_keyboard(),
+            reply_markup=onboarding_keyboard(lang),
         )
     else:
         # Returning user without favorites
         await update.message.reply_text(
             t("welcome", lang),
             parse_mode="MarkdownV2",
-            reply_markup=main_menu_keyboard(),
+            reply_markup=main_menu_keyboard(lang),
         )
 
 
@@ -112,7 +109,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(
         t("help", lang),
         parse_mode="MarkdownV2",
-        reply_markup=main_menu_keyboard(),
+        reply_markup=main_menu_keyboard(lang),
     )
 
 
@@ -125,7 +122,7 @@ async def main_menu_callback(update: Update,
     await query.edit_message_text(
         t("welcome", lang),
         parse_mode="MarkdownV2",
-        reply_markup=main_menu_keyboard(),
+        reply_markup=main_menu_keyboard(lang),
     )
 
 
@@ -137,5 +134,5 @@ async def help_callback(update: Update,
     await query.edit_message_text(
         t("help", lang),
         parse_mode="MarkdownV2",
-        reply_markup=main_menu_keyboard(),
+        reply_markup=main_menu_keyboard(lang),
     )

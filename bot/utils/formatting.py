@@ -126,22 +126,56 @@ def format_route_info(route_num: str, direction: str,
 
 
 def format_metro_line_info(line_code: str, line_data: dict,
-                           stations: list[str]) -> str:
-    """Format metro line information."""
+                           stations: list[str],
+                           stations_data: dict | None = None) -> str:
+    """Format metro line information with a visual station map.
+
+    Args:
+        line_code: Line code (e.g. "A").
+        line_data: Line metadata dict with emoji, name, route.
+        stations: Ordered list of station names on this line.
+        stations_data: Optional dict mapping station name to its data
+            (with "lines" key). When provided, transfer stations are
+            annotated with connecting line emojis.
+    """
+    from bot.config import METRO_LINES as _METRO_LINES
+
     emoji = line_data.get("emoji", "🚇")
     name = line_data.get("name", f"Linha {line_code}")
     route = line_data.get("route", "")
 
-    lines = [
-        f"{emoji} *{escape_md(name)}* \\(Linha `{escape_md(line_code)}`\\)",
-        f"📍 {escape_md(route)}\n",
-        f"*Estações \\({len(stations)}\\):*",
-    ]
-    for i, station in enumerate(stations, 1):
-        prefix = "🔴" if i == 1 or i == len(stations) else "⚪"
-        lines.append(f"  {prefix} {escape_md(station)}")
+    lines = [f"{emoji} *{escape_md(name)}*"]
+    if route:
+        lines.append(f"_{escape_md(route)}_\n")
 
-    return "\n".join(lines)
+    for i, station_name in enumerate(stations):
+        # Build transfer info when station data is available
+        transfer_info = ""
+        if stations_data:
+            sdata = stations_data.get(station_name, {})
+            other_lines = [l for l in sdata.get("lines", []) if l != line_code]
+            if other_lines:
+                other_emojis = "".join(
+                    _METRO_LINES.get(l, {}).get("emoji", "") for l in other_lines
+                )
+                transfer_info = f" 🔄 {other_emojis}"
+
+        escaped_name = escape_md(station_name)
+        if i == 0 or i == len(stations) - 1:
+            lines.append(f"  {emoji} *{escaped_name}*{transfer_info}")
+        else:
+            lines.append(f"  {emoji} {escaped_name}{transfer_info}")
+
+        if i < len(stations) - 1:
+            lines.append("  │")
+
+    lines.append(f"\n📊 {len(stations)} estações")
+
+    text = "\n".join(lines)
+    # Truncate if too long for Telegram (max ~4096 chars)
+    if len(text) > 4000:
+        text = text[:3950] + "\n\n\\.\\.\\. _\\(lista truncada\\)_"
+    return text
 
 
 def escape_md(text: str) -> str:

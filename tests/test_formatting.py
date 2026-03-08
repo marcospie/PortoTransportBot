@@ -160,8 +160,8 @@ class TestFormatMetroLineInfo:
         assert "Station 1" in result
         assert "3" in result  # station count
 
-    def test_line_code_in_backticks(self):
+    def test_visual_map_connector(self):
         line_data = {"emoji": "🔵", "name": "Linha Azul", "route": "A ↔ B"}
-        stations = ["Station 1"]
+        stations = ["Station 1", "Station 2"]
         result = format_metro_line_info("A", line_data, stations)
-        assert "`" in result
+        assert "│" in result  # vertical connector between stations

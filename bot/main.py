@@ -17,6 +17,7 @@ from bot.database import init_db, close_db
 from bot.handlers import bus, favorites, inline, location, metro, routes, settings, start
 from bot.services.metro import download_gtfs
 from bot.services.stcp import download_stcp_gtfs
+from bot.utils.i18n import get_lang, t
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -27,9 +28,9 @@ logger = logging.getLogger(__name__)
 
 async def unknown_callback(update: Update, context) -> None:
     """Catch-all for unmatched callback queries (stale buttons, etc.)."""
-    await update.callback_query.answer(
-        "Este botão já não é válido. Use /start para recomeçar."
-    )
+    lang = get_lang(update)
+    msg = "Este botão já não é válido. Use /start para recomeçar." if lang == "pt" else "This button is no longer valid. Use /start to restart."
+    await update.callback_query.answer(msg)
     try:
         await update.callback_query.edit_message_reply_markup(reply_markup=None)
     except Exception:
@@ -39,13 +40,17 @@ async def unknown_callback(update: Update, context) -> None:
 async def handle_text(update: Update, context) -> None:
     """Route free-text messages to the appropriate handler."""
     text = update.message.text.strip()
+    lang = get_lang(update)
 
-    # Handle persistent reply keyboard buttons
+    # Handle persistent reply keyboard buttons (match both PT and EN labels)
     if text in ("⭐ Favoritos", "⭐ Favorites"):
         await favorites.favorites_command(update, context)
         return
     if text in ("ℹ️ Ajuda", "ℹ️ Help"):
         await start.help_command(update, context)
+        return
+    if text in ("📍 Paragens perto de mim", "📍 Stops near me", "📍 Perto de mim", "📍 Near me"):
+        # Location button text - ignore, location handler handles actual location
         return
 
     # Check if any handler is awaiting input
@@ -61,15 +66,18 @@ async def handle_text(update: Update, context) -> None:
         from bot.services import stcp
         from bot.utils.formatting import format_bus_arrivals
         from bot.keyboards.inline import bus_stop_actions_keyboard
+        from bot.database import is_favorite as _is_favorite
 
         stop_id = text.upper()
         data = await stcp.get_stop_real_time(stop_id)
         if data["arrivals"] or data["stop_name"] != stop_id:
+            user_id = update.effective_user.id
+            is_fav = await _is_favorite(user_id, "bus", stop_id)
             msg = format_bus_arrivals(stop_id, data["stop_name"], data["arrivals"])
             await update.message.reply_text(
                 msg,
                 parse_mode="MarkdownV2",
-                reply_markup=bus_stop_actions_keyboard(stop_id),
+                reply_markup=bus_stop_actions_keyboard(stop_id, is_fav=is_fav, lang=lang),
             )
             return
 
@@ -90,21 +98,24 @@ async def handle_text(update: Update, context) -> None:
 
             from bot.utils.formatting import format_metro_schedule
             from bot.keyboards.inline import metro_station_actions_keyboard
+            from bot.database import is_favorite as _is_fav
 
             msg = format_metro_schedule(station["name"], line_info_str, departures)
             if departures and departures[0].get("estimated"):
-                msg += "\n\n_⚠️ Tempos estimados com base nas frequências_"
+                msg += f"\n\n{t('metro_estimated_warning', lang)}"
+            user_id = update.effective_user.id
+            is_fav = await _is_fav(user_id, "metro", station["name"])
             await update.message.reply_text(
                 msg,
                 parse_mode="MarkdownV2",
-                reply_markup=metro_station_actions_keyboard(station["name"]),
+                reply_markup=metro_station_actions_keyboard(station["name"], is_fav=is_fav, lang=lang),
             )
             return
 
         await update.message.reply_text(
-            f"🔍 Resultados para *{escape_md(text)}*:",
+            t("metro_results_for", lang).format(query=escape_md(text)),
             parse_mode="MarkdownV2",
-            reply_markup=metro_station_results_keyboard(stations),
+            reply_markup=metro_station_results_keyboard(stations, lang=lang),
         )
         return
 
@@ -116,9 +127,9 @@ async def handle_text(update: Update, context) -> None:
         from bot.utils.formatting import escape_md
 
         await update.message.reply_text(
-            f"🔍 Resultados para *{escape_md(text)}*:",
+            t("results_for", lang).format(query=escape_md(text)),
             parse_mode="MarkdownV2",
-            reply_markup=bus_stop_results_keyboard(stops),
+            reply_markup=bus_stop_results_keyboard(stops, lang=lang),
         )
         return
 
@@ -127,14 +138,9 @@ async def handle_text(update: Update, context) -> None:
     from bot.utils.formatting import escape_md
 
     await update.message.reply_text(
-        f"🤔 Não encontrei resultados para *{escape_md(text)}*\\.\n\n"
-        "Tenta pesquisar por:\n"
-        "• Nome de uma paragem STCP\n"
-        "• Código de paragem \\(ex: BCM2\\)\n"
-        "• Nome de estação de metro\n\n"
-        "Ou usa o menu abaixo:",
+        t("no_results", lang).format(query=escape_md(text)),
         parse_mode="MarkdownV2",
-        reply_markup=main_menu_keyboard(),
+        reply_markup=main_menu_keyboard(lang),
     )
 
 
@@ -295,6 +301,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(metro.metro_station_callback, pattern=r"^metro:station:.+$"))
     app.add_handler(CallbackQueryHandler(metro.metro_station_lines_callback, pattern=r"^metro:station_lines:.+$"))
 
+    # Nearby refresh callback
+    app.add_handler(CallbackQueryHandler(location.nearby_refresh_callback, pattern=r"^nearby:refresh$"))
+
     # Route planning callbacks
     app.add_handler(CallbackQueryHandler(routes.route_plan_callback, pattern=r"^plan:route$"))
     app.add_handler(CallbackQueryHandler(routes.route_plan_callback, pattern=r"^route:plan$"))
@@ -319,8 +328,12 @@ def main() -> None:
     async def onboard_location_callback(update: Update, context):
         query = update.callback_query
         await query.answer()
+        lang = get_lang(update)
+        msg = ("📍 Carrega no botão *Perto de mim* no teclado abaixo para partilhar a tua localização\\!"
+               if lang == "pt" else
+               "📍 Tap the *Near me* button on the keyboard below to share your location\\!")
         await query.edit_message_text(
-            "📍 Carrega no botão *Perto de mim* no teclado abaixo para partilhar a tua localização\\!",
+            msg,
             parse_mode="MarkdownV2",
         )
 

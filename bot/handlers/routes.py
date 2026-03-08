@@ -11,6 +11,7 @@ from bot.services.metro import (
     get_next_departures, METRO_LINES, search_stations,
 )
 from bot.utils.formatting import escape_md
+from bot.utils.i18n import get_lang, t
 from bot.config import METRO_LINES as METRO_LINES_CONFIG
 
 logger = logging.getLogger(__name__)
@@ -21,13 +22,14 @@ AWAITING_ROUTE_DEST = "awaiting_route_dest"
 
 async def route_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /route command - start route planning."""
+    lang = get_lang(update)
     await update.message.reply_text(
-        "🗺 *Planear trajeto*\n\n"
-        "Envia o nome da paragem ou estação de *origem*:\n"
-        "Exemplo: `Bolhão`, `Trindade`, `BCM2`",
+        t("route_title", lang) + "\n\n" + t("route_ask_origin", lang),
         parse_mode="MarkdownV2",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Cancelar", callback_data="menu:main")],
+            [InlineKeyboardButton("🔍 Pesquisar origem..." if lang == "pt" else "🔍 Search origin...",
+                                  switch_inline_query_current_chat="")],
+            [InlineKeyboardButton(t("kb_cancel", lang), callback_data="menu:main")],
         ]),
     )
     context.user_data[AWAITING_ROUTE_ORIGIN] = datetime.now()
@@ -37,16 +39,17 @@ async def route_plan_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Start route planning from callback."""
     query = update.callback_query
     await query.answer()
+    lang = get_lang(update)
     context.user_data[AWAITING_ROUTE_ORIGIN] = datetime.now()
     context.user_data.pop(AWAITING_ROUTE_DEST, None)
     context.user_data.pop("route_origin", None)
     await query.edit_message_text(
-        "🗺 *Planear trajeto*\n\n"
-        "Envia o nome da paragem ou estação de *origem*:\n"
-        "Exemplo: `Bolhão`, `Trindade`, `BCM2`",
+        t("route_title", lang) + "\n\n" + t("route_ask_origin", lang),
         parse_mode="MarkdownV2",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Cancelar", callback_data="menu:main")],
+            [InlineKeyboardButton("🔍 Pesquisar origem..." if lang == "pt" else "🔍 Search origin...",
+                                  switch_inline_query_current_chat="")],
+            [InlineKeyboardButton(t("kb_cancel", lang), callback_data="menu:main")],
         ]),
     )
 
@@ -54,6 +57,7 @@ async def route_plan_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def handle_route_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """Handle text input for route planning. Returns True if handled."""
     text = update.message.text.strip()
+    lang = get_lang(update)
 
     # Check if awaiting origin
     ts_origin = context.user_data.get(AWAITING_ROUTE_ORIGIN)
@@ -64,11 +68,11 @@ async def handle_route_text_input(update: Update, context: ContextTypes.DEFAULT_
         origin = await _resolve_location(text)
         if not origin:
             await update.message.reply_text(
-                f"❌ Não encontrei *{escape_md(text)}*\\. Tenta outro nome\\.",
+                t("route_not_found", lang).format(query=escape_md(text)),
                 parse_mode="MarkdownV2",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔄 Tentar novamente", callback_data="route:plan")],
-                    [InlineKeyboardButton("🔙 Menu principal", callback_data="menu:main")],
+                    [InlineKeyboardButton(t("retry", lang), callback_data="route:plan")],
+                    [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
                 ]),
             )
             return True
@@ -80,12 +84,14 @@ async def handle_route_text_input(update: Update, context: ContextTypes.DEFAULT_
         origin_type_emoji = "🚇" if origin["type"] == "metro" else "🚌"
 
         await update.message.reply_text(
-            f"🗺 *Planear trajeto*\n\n"
-            f"📍 Origem: {origin_type_emoji} *{escape_md(origin_label)}*\n\n"
-            f"Agora envia o nome da paragem ou estação de *destino*:",
+            t("route_title", lang) + "\n\n"
+            + t("route_origin_label", lang).format(emoji=origin_type_emoji, name=escape_md(origin_label)) + "\n\n"
+            + t("route_ask_dest", lang),
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("❌ Cancelar", callback_data="menu:main")],
+                [InlineKeyboardButton("🔍 Pesquisar destino..." if lang == "pt" else "🔍 Search destination...",
+                                      switch_inline_query_current_chat="")],
+                [InlineKeyboardButton(t("kb_cancel", lang), callback_data="menu:main")],
             ]),
         )
         return True
@@ -102,11 +108,11 @@ async def handle_route_text_input(update: Update, context: ContextTypes.DEFAULT_
         dest = await _resolve_location(text)
         if not dest:
             await update.message.reply_text(
-                f"❌ Não encontrei *{escape_md(text)}*\\. Tenta outro nome\\.",
+                t("route_not_found", lang).format(query=escape_md(text)),
                 parse_mode="MarkdownV2",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔄 Tentar novamente", callback_data="route:plan")],
-                    [InlineKeyboardButton("🔙 Menu principal", callback_data="menu:main")],
+                    [InlineKeyboardButton(t("retry", lang), callback_data="route:plan")],
+                    [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
                 ]),
             )
             return True
@@ -114,7 +120,7 @@ async def handle_route_text_input(update: Update, context: ContextTypes.DEFAULT_
         context.user_data.pop("route_origin", None)
 
         # Find routes between origin and destination
-        await _find_and_show_routes(update.message, origin, dest)
+        await _find_and_show_routes(update.message, origin, dest, lang=lang)
         return True
 
     return False
@@ -155,13 +161,13 @@ async def _resolve_location(query: str) -> dict | None:
     return None
 
 
-async def _find_and_show_routes(message, origin: dict, dest: dict) -> None:
+async def _find_and_show_routes(message, origin: dict, dest: dict, lang: str = "pt") -> None:
     """Find and display route options between origin and destination."""
     origin_emoji = "🚇" if origin["type"] == "metro" else "🚌"
     dest_emoji = "🚇" if dest["type"] == "metro" else "🚌"
 
     lines = [
-        "🗺 *Trajeto encontrado*\n",
+        t("route_found", lang),
         f"📍 {origin_emoji} *{escape_md(origin['name'])}*",
         f"📍 {dest_emoji} *{escape_md(dest['name'])}*\n",
         "━━━━━━━━━━━━━━━━\n",
@@ -171,42 +177,42 @@ async def _find_and_show_routes(message, origin: dict, dest: dict) -> None:
 
     # Case 1: Both are metro stations
     if origin["type"] == "metro" and dest["type"] == "metro":
-        options = _find_metro_route(origin["name"], dest["name"])
+        options = _find_metro_route(origin["name"], dest["name"], lang=lang)
         if options:
             options_found = True
             for i, option in enumerate(options, 1):
-                lines.append(f"*Opção {i}:*")
+                lines.append(t("route_option", lang).format(n=i))
                 for step in option["steps"]:
                     lines.append(f"  {step}")
                 lines.append("")
 
     # Case 2: Both are bus stops
     elif origin["type"] == "bus" and dest["type"] == "bus":
-        options = await _find_bus_route(origin["stop_id"], dest["stop_id"])
+        options = await _find_bus_route(origin["stop_id"], dest["stop_id"], lang=lang)
         if options:
             options_found = True
             for i, option in enumerate(options, 1):
-                lines.append(f"*Opção {i}:*")
+                lines.append(t("route_option", lang).format(n=i))
                 for step in option["steps"]:
                     lines.append(f"  {step}")
                 lines.append("")
 
     # Case 3: Mixed (bus + metro)
     else:
-        lines.append("🔄 *Trajeto misto \\(autocarro \\+ metro\\)*\n")
+        lines.append(t("route_mixed", lang))
         if origin["type"] == "metro":
-            lines.append(f"🚇 Apanha o metro em *{escape_md(origin['name'])}*")
-            lines.append(f"🚌 Depois apanha um autocarro até *{escape_md(dest['name'])}*")
+            lines.append(t("route_take_metro", lang).format(name=escape_md(origin['name'])))
+            lines.append(t("route_then_bus", lang).format(name=escape_md(dest['name'])))
         else:
-            lines.append(f"🚌 Apanha um autocarro em *{escape_md(origin['name'])}*")
-            lines.append(f"🚇 Depois apanha o metro em *{escape_md(dest['name'])}*")
+            lines.append(t("route_take_bus", lang).format(name=escape_md(origin['name'])))
+            lines.append(t("route_then_metro", lang).format(name=escape_md(dest['name'])))
         lines.append("")
-        lines.append("_💡 Consulta as estações de metro perto da tua paragem_")
+        lines.append(t("route_tip_nearby", lang))
         options_found = True
 
     if not options_found:
-        lines.append("❌ Não foi possível encontrar uma rota direta\\.")
-        lines.append("_💡 Tenta usar locais mais conhecidos ou estações de metro_")
+        lines.append(t("route_no_direct", lang))
+        lines.append(t("route_tip_metro", lang))
 
     text = "\n".join(lines)
     if len(text) > 4000:
@@ -216,13 +222,13 @@ async def _find_and_show_routes(message, origin: dict, dest: dict) -> None:
         text,
         parse_mode="MarkdownV2",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔄 Novo trajeto", callback_data="route:plan")],
-            [InlineKeyboardButton("🔙 Menu principal", callback_data="menu:main")],
+            [InlineKeyboardButton(t("route_new", lang), callback_data="route:plan")],
+            [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
         ]),
     )
 
 
-def _find_metro_route(origin_name: str, dest_name: str) -> list[dict]:
+def _find_metro_route(origin_name: str, dest_name: str, lang: str = "pt") -> list[dict]:
     """Find metro route options between two stations."""
     origin_data = STATIONS.get(origin_name, {})
     dest_data = STATIONS.get(dest_name, {})
@@ -244,9 +250,9 @@ def _find_metro_route(origin_name: str, dest_name: str) -> list[dict]:
             name = line_data.get("name", f"Linha {line_code}")
             options.append({
                 "steps": [
-                    f"{emoji} Apanha a *{escape_md(name)}*",
-                    f"   De *{escape_md(origin_name)}* até *{escape_md(dest_name)}*",
-                    "   🎯 _Viagem direta \\- sem transbordos_",
+                    f"{emoji} Apanha a *{escape_md(name)}*" if lang == "pt" else f"{emoji} Take the *{escape_md(name)}*",
+                    f"   De *{escape_md(origin_name)}* até *{escape_md(dest_name)}*" if lang == "pt" else f"   From *{escape_md(origin_name)}* to *{escape_md(dest_name)}*",
+                    f"   {t('route_direct', lang)}",
                 ],
                 "transfers": 0,
             })
@@ -267,13 +273,16 @@ def _find_metro_route(origin_name: str, dest_name: str) -> list[dict]:
                     if line1 != line2 or (line1 == line2 and transfer_name != origin_name and transfer_name != dest_name):
                         l1_data = METRO_LINES.get(line1, {})
                         l2_data = METRO_LINES.get(line2, {})
+                        take_text = "Apanha a" if lang == "pt" else "Take the"
+                        from_to = "De" if lang == "pt" else "From"
+                        to_word = "até" if lang == "pt" else "to"
                         options.append({
                             "steps": [
-                                f"{l1_data.get('emoji', '🚇')} Apanha a *{escape_md(l1_data.get('name', f'Linha {line1}'))}*",
-                                f"   De *{escape_md(origin_name)}* até *{escape_md(transfer_name)}*",
-                                f"🔄 Transbordo em *{escape_md(transfer_name)}*",
-                                f"{l2_data.get('emoji', '🚇')} Apanha a *{escape_md(l2_data.get('name', f'Linha {line2}'))}*",
-                                f"   De *{escape_md(transfer_name)}* até *{escape_md(dest_name)}*",
+                                f"{l1_data.get('emoji', '🚇')} {take_text} *{escape_md(l1_data.get('name', f'Linha {line1}'))}*",
+                                f"   {from_to} *{escape_md(origin_name)}* {to_word} *{escape_md(transfer_name)}*",
+                                t("route_transfer", lang).format(station=escape_md(transfer_name)),
+                                f"{l2_data.get('emoji', '🚇')} {take_text} *{escape_md(l2_data.get('name', f'Linha {line2}'))}*",
+                                f"   {from_to} *{escape_md(transfer_name)}* {to_word} *{escape_md(dest_name)}*",
                             ],
                             "transfers": 1,
                             "transfer_station": transfer_name,
@@ -292,7 +301,7 @@ def _find_metro_route(origin_name: str, dest_name: str) -> list[dict]:
     return unique_options[:3]
 
 
-async def _find_bus_route(origin_id: str, dest_id: str) -> list[dict]:
+async def _find_bus_route(origin_id: str, dest_id: str, lang: str = "pt") -> list[dict]:
     """Find bus route options between two stops."""
     try:
         # Get info for both stops to find common routes
@@ -306,12 +315,15 @@ async def _find_bus_route(origin_id: str, dest_id: str) -> list[dict]:
 
         options = []
         if common_routes:
+            take_line = "Apanha a linha" if lang == "pt" else "Take line"
+            from_word = "De" if lang == "pt" else "From"
+            to_word = "até" if lang == "pt" else "to"
             for route_num in list(common_routes)[:3]:
                 options.append({
                     "steps": [
-                        f"🚌 Apanha a linha *{escape_md(route_num)}*",
-                        f"   De *{escape_md(origin_info.get('name', origin_id))}* até *{escape_md(dest_info.get('name', dest_id))}*",
-                        "   🎯 _Viagem direta \\- sem transbordos_",
+                        f"🚌 {take_line} *{escape_md(route_num)}*",
+                        f"   {from_word} *{escape_md(origin_info.get('name', origin_id))}* {to_word} *{escape_md(dest_info.get('name', dest_id))}*",
+                        f"   {t('route_direct', lang)}",
                     ],
                     "transfers": 0,
                 })
@@ -319,8 +331,8 @@ async def _find_bus_route(origin_id: str, dest_id: str) -> list[dict]:
         if not options:
             options.append({
                 "steps": [
-                    "_Sem linha direta entre estas paragens_",
-                    "💡 _Tenta planear via uma estação de metro_",
+                    t("route_no_direct_bus", lang),
+                    t("route_tip_via_metro", lang),
                 ],
                 "transfers": -1,
             })
