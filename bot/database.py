@@ -359,6 +359,103 @@ async def update_user_setting(user_id: int, key: str, value) -> None:
 
 
 # ===================================================================
+# Commuter profiles
+# ===================================================================
+
+_COMMUTER_DIR = DATA_DIR / "commuter"
+
+DEFAULT_COMMUTER_PROFILE = {
+    "home_name": "",
+    "home_lat": 0.0,
+    "home_lon": 0.0,
+    "work_name": "",
+    "work_lat": 0.0,
+    "work_lon": 0.0,
+    "preferred_mode": "any",
+    "usual_departure_time": "08:00",
+    "usual_return_time": "18:00",
+}
+
+
+def _json_commuter_path(user_id: int) -> Path:
+    _COMMUTER_DIR.mkdir(parents=True, exist_ok=True)
+    return _COMMUTER_DIR / f"{user_id}.json"
+
+
+def _json_load_commuter(user_id: int) -> Optional[dict]:
+    path = _json_commuter_path(user_id)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _json_save_commuter(user_id: int, profile: dict) -> None:
+    path = _json_commuter_path(user_id)
+    path.write_text(json.dumps(profile, ensure_ascii=False, indent=2))
+
+
+def _json_delete_commuter(user_id: int) -> bool:
+    path = _json_commuter_path(user_id)
+    if path.exists():
+        path.unlink()
+        return True
+    return False
+
+
+async def save_commuter_profile(user_id: int, profile: dict) -> None:
+    """Save a commuter profile for the user."""
+    # Merge with defaults so all keys are present
+    full = {**DEFAULT_COMMUTER_PROFILE, **profile}
+    if not _use_db:
+        _json_save_commuter(user_id, full)
+        return
+
+    await get_or_create_user(user_id)
+    async with _pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO commuter_profiles (user_id, profile_data)
+            VALUES ($1, $2::jsonb)
+            ON CONFLICT (user_id)
+            DO UPDATE SET profile_data = $2::jsonb, updated_at = now()
+            """,
+            user_id, json.dumps(full, ensure_ascii=False),
+        )
+
+
+async def get_commuter_profile(user_id: int) -> Optional[dict]:
+    """Return the commuter profile for a user, or None."""
+    if not _use_db:
+        return _json_load_commuter(user_id)
+
+    async with _pool.acquire() as conn:
+        row = await conn.fetchval(
+            "SELECT profile_data FROM commuter_profiles WHERE user_id = $1",
+            user_id,
+        )
+        if row is None:
+            return None
+        if isinstance(row, str):
+            return json.loads(row)
+        return dict(row)
+
+
+async def delete_commuter_profile(user_id: int) -> bool:
+    """Delete a commuter profile. Returns True if something was deleted."""
+    if not _use_db:
+        return _json_delete_commuter(user_id)
+
+    async with _pool.acquire() as conn:
+        result = await conn.execute(
+            "DELETE FROM commuter_profiles WHERE user_id = $1", user_id,
+        )
+        return result.split()[-1] != "0"
+
+
+# ===================================================================
 # Migration helper
 # ===================================================================
 
