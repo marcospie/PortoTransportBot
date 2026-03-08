@@ -19,3 +19,4 @@ data/favorites/
 .coverage
 htmlcov/
 *.log
+.claude/
