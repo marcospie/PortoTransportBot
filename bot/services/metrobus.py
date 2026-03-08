@@ -10,28 +10,18 @@ from datetime import datetime, time, timedelta
 
 logger = logging.getLogger(__name__)
 
-# MetroBus lines
+# MetroBus lines — only Line 1 is currently operational
 METROBUS_LINES = {
     "1": {
         "name": "Linha 1 (Boavista)",
         "emoji": "\U0001f68d",  # bus emoji
-        "route": "Casa da Música ↔ Matosinhos",
-    },
-    "2": {
-        "name": "Linha 2 (Campo Alegre)",
-        "emoji": "\U0001f68d",
-        "route": "Praça da Galiza ↔ Antas",
-    },
-    "3": {
-        "name": "Linha 3 (VCI)",
-        "emoji": "\U0001f68d",
-        "route": "Campanhã ↔ Ramalde",
+        "route": "Casa da Música ↔ Império",
     },
 }
 
 # Complete list of MetroBus stops with line associations and coordinates
+# Line 1 (Boavista): Casa da Música → Império (Matosinhos)
 STOPS: dict[str, dict] = {
-    # Line 1 (Boavista): Casa da Música → Matosinhos
     "Casa da Música (MetroBus)": {"lines": ["1"], "zone": "PRT", "lat": 41.1585, "lon": -8.6305},
     "Rotunda da Boavista": {"lines": ["1"], "zone": "PRT", "lat": 41.1578, "lon": -8.6260},
     "Bom Sucesso": {"lines": ["1"], "zone": "PRT", "lat": 41.1592, "lon": -8.6350},
@@ -43,36 +33,14 @@ STOPS: dict[str, dict] = {
     "Estádio do Bessa": {"lines": ["1"], "zone": "PRT", "lat": 41.1740, "lon": -8.6630},
     "Norton de Matos": {"lines": ["1"], "zone": "MTS", "lat": 41.1760, "lon": -8.6660},
     "Jardim de Matosinhos": {"lines": ["1"], "zone": "MTS", "lat": 41.1790, "lon": -8.6710},
-    "Matosinhos (MetroBus)": {"lines": ["1"], "zone": "MTS", "lat": 41.1820, "lon": -8.6750},
-    # Line 2 (Campo Alegre): Praça da Galiza → Antas
-    "Praça da Galiza": {"lines": ["2"], "zone": "PRT", "lat": 41.1530, "lon": -8.6305},
-    "Campo Alegre": {"lines": ["2"], "zone": "PRT", "lat": 41.1510, "lon": -8.6340},
-    "Arrábida": {"lines": ["2"], "zone": "PRT", "lat": 41.1485, "lon": -8.6380},
-    "Flor da Rosa": {"lines": ["2"], "zone": "PRT", "lat": 41.1475, "lon": -8.6300},
-    "Lordelo": {"lines": ["2"], "zone": "PRT", "lat": 41.1465, "lon": -8.6250},
-    "Passeio Alegre": {"lines": ["2"], "zone": "PRT", "lat": 41.1460, "lon": -8.6180},
-    "Massarelos": {"lines": ["2"], "zone": "PRT", "lat": 41.1470, "lon": -8.6110},
-    "Restauração": {"lines": ["2"], "zone": "PRT", "lat": 41.1490, "lon": -8.6050},
-    "Constituição": {"lines": ["2"], "zone": "PRT", "lat": 41.1520, "lon": -8.5960},
-    "Antas": {"lines": ["2"], "zone": "PRT", "lat": 41.1610, "lon": -8.5860},
-    # Line 3 (VCI): Campanhã → Ramalde (circular via VCI)
-    "Campanhã (MetroBus)": {"lines": ["3"], "zone": "PRT", "lat": 41.1487, "lon": -8.5853},
-    "Via de Cintura Interna Este": {"lines": ["3"], "zone": "PRT", "lat": 41.1530, "lon": -8.5870},
-    "Amial": {"lines": ["3"], "zone": "PRT", "lat": 41.1620, "lon": -8.5910},
-    "Paranhos": {"lines": ["3"], "zone": "PRT", "lat": 41.1680, "lon": -8.5990},
-    "Hospital de São João (MetroBus)": {"lines": ["3"], "zone": "PRT", "lat": 41.1856, "lon": -8.6020},
-    "Polo Universitário (MetroBus)": {"lines": ["3"], "zone": "PRT", "lat": 41.1762, "lon": -8.6019},
-    "Via de Cintura Interna Oeste": {"lines": ["3"], "zone": "PRT", "lat": 41.1730, "lon": -8.6150},
-    "Prelada": {"lines": ["3"], "zone": "PRT", "lat": 41.1720, "lon": -8.6250},
-    "Carvalhido": {"lines": ["3"], "zone": "PRT", "lat": 41.1730, "lon": -8.6320},
-    "Ramalde (MetroBus)": {"lines": ["3"], "zone": "PRT", "lat": 41.1766, "lon": -8.6395},
+    "Império": {"lines": ["1"], "zone": "MTS", "lat": 41.1820, "lon": -8.6750},
 }
 
 # Typical frequencies (minutes between departures)
 FREQUENCIES = {
-    "peak": {"1": 5, "2": 6, "3": 8},
-    "off_peak": {"1": 10, "2": 12, "3": 15},
-    "weekend": {"1": 12, "2": 15, "3": 18},
+    "peak": {"1": 5},
+    "off_peak": {"1": 10},
+    "weekend": {"1": 12},
 }
 
 # Operating hours

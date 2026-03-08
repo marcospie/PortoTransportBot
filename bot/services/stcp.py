@@ -56,7 +56,7 @@ def search_stops_local(query: str, max_results: int = 10) -> list[dict]:
 
     names_map: dict[str, dict] = {}
     for stop in _gtfs_bus_stops:
-        key = f"{stop['name']} ({stop['stop_id']})"
+        key = f"{stop['name']} {stop['stop_id']}"
         names_map[key] = stop
 
     # Also try matching against stop_id directly

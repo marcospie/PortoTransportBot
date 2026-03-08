@@ -1,5 +1,6 @@
 """Inline query handler for sharing transport info and autocomplete search."""
 
+import logging
 import uuid
 
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
@@ -10,6 +11,8 @@ from bot.services.stcp import search_stops_local
 from bot.services.metro import search_stations, get_next_departures
 from bot.services.metrobus import search_stops as search_metrobus_stops
 from bot.utils.formatting import escape_md
+
+logger = logging.getLogger(__name__)
 
 
 async def inline_query_handler(update: Update,
@@ -74,7 +77,6 @@ async def inline_query_handler(update: Update,
         return
 
     if mode in ("all", "bus"):
-        # Always try fuzzy local search (handles both codes and names)
         await _add_bus_stops_quick(query, results)
 
     if mode in ("all", "metro"):
@@ -137,7 +139,7 @@ async def _add_bus_stop_by_code(stop_code: str, results: list) -> None:
                 ),
             ))
     except Exception:
-        pass
+        logger.exception("Error looking up bus stop by code: %s", stop_code)
 
 
 async def _add_bus_stops_quick(query: str, results: list) -> None:
@@ -173,7 +175,7 @@ async def _add_bus_stops_quick(query: str, results: list) -> None:
                 ),
             ))
     except Exception:
-        pass
+        logger.exception("Error searching bus stops for query: %s", query)
 
 
 def _add_metro_stations_quick(query: str, results: list) -> None:
@@ -209,7 +211,7 @@ def _add_metro_stations_quick(query: str, results: list) -> None:
                 ),
             ))
     except Exception:
-        pass
+        logger.exception("Error searching metro stations for query: %s", query)
 
 
 def _add_metrobus_stops_quick(query: str, results: list) -> None:
@@ -245,4 +247,4 @@ def _add_metrobus_stops_quick(query: str, results: list) -> None:
                 ),
             ))
     except Exception:
-        pass
+        logger.exception("Error searching MetroBus stops for query: %s", query)

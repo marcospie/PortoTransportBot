@@ -12,29 +12,36 @@ from bot.utils.i18n import t
 
 def main_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
+        # Primary transport
         [
             InlineKeyboardButton(t("kb_buses", lang), callback_data="menu:bus"),
-            InlineKeyboardButton(t("kb_metro", lang), callback_data="menu:metro"),
             InlineKeyboardButton(t("kb_metrobus", lang), callback_data="menu:metrobus"),
         ],
-        [InlineKeyboardButton(t("kb_trains", lang), callback_data="menu:trains")],
+        [
+            InlineKeyboardButton(t("kb_metro", lang), callback_data="menu:metro"),
+            InlineKeyboardButton(t("kb_trains", lang), callback_data="menu:trains"),
+        ],
+        # Tools
         [
             InlineKeyboardButton(t("kb_plan_route", lang), callback_data="plan:route"),
-            InlineKeyboardButton(t("kb_tourist", lang), callback_data="tourist:menu"),
-        ],
-        [InlineKeyboardButton(t("kb_events", lang), callback_data="menu:events")],
-        [
             InlineKeyboardButton(t("kb_favorites", lang), callback_data="menu:favorites"),
-            InlineKeyboardButton(t("kb_settings", lang), callback_data="menu:settings"),
+        ],
+        # Info & extras
+        [
+            InlineKeyboardButton(t("kb_tourist", lang), callback_data="tourist:menu"),
+            InlineKeyboardButton(t("kb_events", lang), callback_data="menu:events"),
+            InlineKeyboardButton(t("kb_weather", lang), callback_data="menu:weather"),
         ],
         [
             InlineKeyboardButton(t("kb_alerts", lang), callback_data="menu:alerts"),
             InlineKeyboardButton(t("kb_accessibility", lang), callback_data="menu:accessibility"),
+            InlineKeyboardButton(t("kb_settings", lang), callback_data="menu:settings"),
         ],
-        [InlineKeyboardButton(t("kb_weather", lang), callback_data="menu:weather")],
-        [InlineKeyboardButton(t("kb_help", lang), callback_data="menu:help")],
-        [InlineKeyboardButton(t("kb_quick_search", lang),
-                              switch_inline_query_current_chat="")],
+        [
+            InlineKeyboardButton(t("kb_help", lang), callback_data="menu:help"),
+            InlineKeyboardButton(t("kb_quick_search", lang),
+                                  switch_inline_query_current_chat=""),
+        ],
     ])
 
 

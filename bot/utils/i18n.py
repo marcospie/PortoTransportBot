@@ -492,7 +492,7 @@ TRANSLATIONS = {
         "weather_tip_nice": "Bom tempo - agradável para caminhar",
         "weather_tip_hot": "Calor - prefira transportes com ar condicionado",
         "weather_tip_cold": "Frio - abrigue-se nas estações",
-        "weather_disclaimer": "Baseado em médias climáticas, não tempo real.",
+        "weather_disclaimer": "Fonte: Open-Meteo.com (tempo real)",
         "kb_weather": "🌤 Meteo",
     },
     "en": {
@@ -984,7 +984,7 @@ TRANSLATIONS = {
         "weather_tip_nice": "Nice weather - pleasant for walking",
         "weather_tip_hot": "Hot - prefer air-conditioned transport",
         "weather_tip_cold": "Cold - shelter in stations",
-        "weather_disclaimer": "Based on climate averages, not real-time.",
+        "weather_disclaimer": "Source: Open-Meteo.com (real-time)",
         "kb_weather": "🌤 Weather",
     },
 }

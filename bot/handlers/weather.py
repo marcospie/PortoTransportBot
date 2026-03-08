@@ -13,9 +13,9 @@ from bot.utils.i18n import get_lang, t
 logger = logging.getLogger(__name__)
 
 
-def _format_weather_message(lang: str = "pt") -> str:
+async def _format_weather_message(lang: str = "pt") -> str:
     """Format the weather overview message."""
-    info = get_weather_info()
+    info = await get_weather_info()
 
     title = t("weather_title", lang)
     separator = "\u2501" * 16
@@ -25,30 +25,33 @@ def _format_weather_message(lang: str = "pt") -> str:
     sunrise_label = t("weather_sunrise", lang)
     sunset_label = t("weather_sunset", lang)
     tip_label = t("weather_tip", lang)
-    disclaimer = t("weather_disclaimer", lang)
 
     description = info["description_pt"] if lang == "pt" else info["description_en"]
     tip = get_transport_tip(lang)
 
     emoji = info["emoji"]
 
-    return (
+    text = (
         f"{emoji} *{escape_md(title)}*\n"
         f"{separator}\n\n"
         f"_{escape_md(description)}_\n\n"
-        f"\U0001f321\ufe0f {escape_md(temp_label)}: *{info['temp_min']}\u00b0C \\- {info['temp_max']}\u00b0C*\n"
+        f"\U0001f321\ufe0f {escape_md(temp_label)}: *{info['temp_now']}\u00b0C* "
+        f"\\({info['temp_min']}\u00b0C \\- {info['temp_max']}\u00b0C\\)\n"
         f"\U0001f327\ufe0f {escape_md(rain_label)}: *{info['rain_prob']}%*\n"
+        f"\U0001f4a8 {escape_md('Vento' if lang == 'pt' else 'Wind')}: *{info['wind']} km/h*\n"
+        f"\U0001f4a7 {escape_md('Humidade' if lang == 'pt' else 'Humidity')}: *{info['humidity']}%*\n"
         f"\U0001f305 {escape_md(sunrise_label)}: *{escape_md(info['sunrise'])}*\n"
         f"\U0001f307 {escape_md(sunset_label)}: *{escape_md(info['sunset'])}*\n\n"
-        f"\U0001f4a1 {escape_md(tip_label)}: {escape_md(tip)}\n\n"
-        f"_{escape_md(disclaimer)}_"
+        f"\U0001f4a1 {escape_md(tip_label)}: {escape_md(tip)}"
     )
+
+    return text
 
 
 async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /meteo command - show weather overview for Porto."""
     lang = get_lang(update)
-    msg = _format_weather_message(lang)
+    msg = await _format_weather_message(lang)
 
     await update.message.reply_text(
         msg,
@@ -63,7 +66,7 @@ async def weather_menu_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     lang = get_lang(update)
 
-    msg = _format_weather_message(lang)
+    msg = await _format_weather_message(lang)
 
     await query.edit_message_text(
         msg,

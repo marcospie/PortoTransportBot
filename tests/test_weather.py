@@ -1,7 +1,7 @@
 """Tests for the Weather (Meteorologia) feature."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from telegram import InlineKeyboardMarkup
 
@@ -51,12 +51,13 @@ def _make_update(user_id=123, text="", lang="pt", chat_id=456):
 # ===================================================================
 
 class TestWeatherService:
-    def test_get_weather_info_returns_dict_with_expected_keys(self):
+    @pytest.mark.asyncio
+    async def test_get_weather_info_returns_dict_with_expected_keys(self):
         from bot.services.weather import get_weather_info
-        info = get_weather_info()
+        info = await get_weather_info()
         assert isinstance(info, dict)
         expected_keys = {
-            "month", "temp_min", "temp_max", "rain_prob",
+            "temp_min", "temp_max", "rain_prob",
             "description_pt", "description_en",
             "sunrise", "sunset", "emoji",
         }
@@ -74,41 +75,39 @@ class TestWeatherService:
         assert isinstance(tip, str)
         assert len(tip) > 0
 
-    def test_get_weather_emoji_returns_emoji(self):
-        from bot.services.weather import get_weather_emoji
-        for month in range(1, 13):
-            emoji = get_weather_emoji(month)
-            assert isinstance(emoji, str)
-            assert len(emoji) > 0
+    def test_weather_emoji_returns_emoji(self):
+        from bot.services.weather import _weather_emoji
+        # Test a few WMO codes
+        assert isinstance(_weather_emoji(0), str)  # clear
+        assert isinstance(_weather_emoji(3), str)  # overcast
+        assert isinstance(_weather_emoji(61), str)  # rain
+        assert isinstance(_weather_emoji(95), str)  # thunderstorm
 
-    def test_climate_data_all_months(self):
-        from bot.services.weather import PORTO_CLIMATE
-        for month in range(1, 13):
-            assert month in PORTO_CLIMATE, f"Missing month {month}"
-            data = PORTO_CLIMATE[month]
-            assert "temp_min" in data
-            assert "temp_max" in data
-            assert "rain_prob" in data
-            assert "description_pt" in data
-            assert "description_en" in data
-            assert "sunrise" in data
-            assert "sunset" in data
+    def test_fallback_weather_has_expected_keys(self):
+        from bot.services.weather import _fallback_weather
+        data = _fallback_weather()
+        assert isinstance(data, dict)
+        assert "temp_min" in data
+        assert "temp_max" in data
+        assert "rain_prob" in data
+        assert "description_pt" in data
+        assert "description_en" in data
+        assert "sunrise" in data
+        assert "sunset" in data
+        assert "emoji" in data
 
-    def test_winter_rain_probability_high(self):
-        from bot.services.weather import PORTO_CLIMATE
-        winter_months = [12, 1, 2]
-        for month in winter_months:
-            assert PORTO_CLIMATE[month]["rain_prob"] >= 60, (
-                f"Month {month} should have high rain probability"
-            )
+    def test_fallback_weather_reasonable_values(self):
+        from bot.services.weather import _fallback_weather
+        data = _fallback_weather()
+        assert -5 <= data["temp_min"] <= 30
+        assert 5 <= data["temp_max"] <= 45
+        assert 0 <= data["rain_prob"] <= 100
 
-    def test_summer_rain_probability_low(self):
-        from bot.services.weather import PORTO_CLIMATE
-        summer_months = [6, 7, 8]
-        for month in summer_months:
-            assert PORTO_CLIMATE[month]["rain_prob"] <= 20, (
-                f"Month {month} should have low rain probability"
-            )
+    def test_wmo_codes_have_both_languages(self):
+        from bot.services.weather import _WMO_CODES
+        for code, (pt, en) in _WMO_CODES.items():
+            assert isinstance(pt, str) and len(pt) > 0, f"Missing PT for code {code}"
+            assert isinstance(en, str) and len(en) > 0, f"Missing EN for code {code}"
 
 
 # ===================================================================

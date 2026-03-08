@@ -32,9 +32,9 @@ class TestSearchStops:
         assert any("Boavista" in r["name"] for r in results)
 
     def test_case_insensitive(self):
-        results = search_stops("campanhã")
+        results = search_stops("rotunda")
         assert len(results) >= 1
-        assert any("Campanhã" in r["name"] for r in results)
+        assert any("Rotunda" in r["name"] for r in results)
 
     def test_no_match(self):
         results = search_stops("xyznonexistent")
@@ -94,7 +94,7 @@ class TestGetNextDepartures:
         assert len(deps) == 0
 
     def test_departure_fields(self):
-        deps = get_next_departures("Antas")
+        deps = get_next_departures("Rotunda da Boavista")
         assert len(deps) > 0
         dep = deps[0]
         assert "direction" in dep
@@ -152,19 +152,7 @@ class TestGetLineStops:
         stops = get_line_stops("1")
         assert len(stops) >= 10
         assert any("Casa da Música" in s for s in stops)
-        assert any("Matosinhos" in s for s in stops)
-
-    def test_line_2(self):
-        stops = get_line_stops("2")
-        assert len(stops) >= 8
-        assert any("Galiza" in s for s in stops)
-        assert any("Antas" in s for s in stops)
-
-    def test_line_3(self):
-        stops = get_line_stops("3")
-        assert len(stops) >= 8
-        assert any("Campanhã" in s for s in stops)
-        assert any("Ramalde" in s for s in stops)
+        assert any("Império" in s for s in stops)
 
     def test_invalid_line(self):
         stops = get_line_stops("99")

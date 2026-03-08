@@ -62,12 +62,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await _search_and_show_stations(update.message, station_name, context, lang=lang)
             return
 
-    # Send persistent reply keyboard
-    await update.message.reply_text(
-        "⌨️",
-        reply_markup=_reply_keyboard(lang),
-    )
-
     # Check if user has favorites (returning user)
     user_id = update.effective_user.id
 

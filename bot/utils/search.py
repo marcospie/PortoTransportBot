@@ -53,7 +53,7 @@ def normalize(text: str) -> str:
     stripped = _strip_accents(lower)
 
     # Remove punctuation except dots (for abbreviations)
-    cleaned = re.sub(r"[''`]", "", stripped)
+    cleaned = re.sub(r"[''`()\[\]]", "", stripped)
 
     # Build expanded form with abbreviation alternatives
     tokens = cleaned.split()
