@@ -21,14 +21,13 @@ def main_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
             InlineKeyboardButton(t("kb_metro", lang), callback_data="menu:metro"),
             InlineKeyboardButton(t("kb_trains", lang), callback_data="menu:trains"),
         ],
-        # Tools
+        # Tools & tourist
         [
             InlineKeyboardButton(t("kb_plan_route", lang), callback_data="plan:route"),
-            InlineKeyboardButton(t("kb_favorites", lang), callback_data="menu:favorites"),
-        ],
-        # Info & extras
-        [
             InlineKeyboardButton(t("kb_tourist", lang), callback_data="tourist:menu"),
+        ],
+        [
+            InlineKeyboardButton(t("kb_favorites", lang), callback_data="menu:favorites"),
             InlineKeyboardButton(t("kb_events", lang), callback_data="menu:events"),
             InlineKeyboardButton(t("kb_weather", lang), callback_data="menu:weather"),
         ],

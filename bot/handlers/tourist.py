@@ -92,11 +92,19 @@ async def tourist_category_callback(update: Update, context: ContextTypes.DEFAUL
     if len(text) > 4000:
         text = text[:3950] + "\n\n\\.\\.\\. _\\(truncado\\)_"
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
-        reply_markup=tourist_category_keyboard(category_key, lang),
-    )
+    try:
+        await query.edit_message_text(
+            text,
+            parse_mode="MarkdownV2",
+            reply_markup=tourist_category_keyboard(category_key, lang),
+        )
+    except Exception:
+        logger.exception("MarkdownV2 error in tourist category %s", category_key)
+        # Fallback: send without markdown
+        await query.edit_message_text(
+            text.replace("\\", ""),
+            reply_markup=tourist_category_keyboard(category_key, lang),
+        )
 
 
 async def tourist_destination_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -129,13 +137,22 @@ async def tourist_destination_callback(update: Update, context: ContextTypes.DEF
     from bot.services.metro import STATIONS
     map_station = station if station and station in STATIONS else None
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
-        reply_markup=tourist_destination_keyboard(
-            category_key, dest_index, station=map_station, lang=lang
-        ),
-    )
+    try:
+        await query.edit_message_text(
+            text,
+            parse_mode="MarkdownV2",
+            reply_markup=tourist_destination_keyboard(
+                category_key, dest_index, station=map_station, lang=lang
+            ),
+        )
+    except Exception:
+        logger.exception("MarkdownV2 error in tourist dest %s:%d", category_key, dest_index)
+        await query.edit_message_text(
+            text.replace("\\", ""),
+            reply_markup=tourist_destination_keyboard(
+                category_key, dest_index, station=map_station, lang=lang
+            ),
+        )
 
 
 async def tourist_tickets_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -170,7 +187,7 @@ def _format_category_with_transport(cat: dict, emoji: str, title: str, lang: str
         else:
             transport_line = f"🚇 {escape_md(station)}"
             if line_name:
-                transport_line += f" \\— {escape_md(line_name)}"
+                transport_line += f" — {escape_md(line_name)}"
 
         lines.append(transport_line)
 
@@ -185,9 +202,9 @@ def _format_category_with_transport(cat: dict, emoji: str, title: str, lang: str
             extras.append(escape_md(zone))
         if walk_min and walk_min > 0:
             if lang == "pt":
-                extras.append(f"~{walk_min} min a pé")
+                extras.append(f"\\~{walk_min} min a pé")
             else:
-                extras.append(f"~{walk_min} min walk")
+                extras.append(f"\\~{walk_min} min walk")
         else:
             if lang == "pt":
                 extras.append("saída direta")
