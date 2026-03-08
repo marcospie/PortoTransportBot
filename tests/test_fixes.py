@@ -24,7 +24,7 @@ class TestNearbyRadius:
 
     def test_near_matosinhos_sul_finds_station(self):
         """User right at Matosinhos Sul should see it."""
-        nearby = get_nearby_stations(41.1796, -8.6729, NEARBY_RADIUS_KM)
+        nearby = get_nearby_stations(41.1801, -8.6886, NEARBY_RADIUS_KM)
         names = [s["name"] for s in nearby]
         assert "Matosinhos Sul" in names
 
