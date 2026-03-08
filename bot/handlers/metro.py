@@ -244,7 +244,7 @@ def _build_station_text(station_name: str, departures: list[dict],
 
 async def metro_station_callback(update: Update,
                                    context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show station departures (fast: GTFS/estimated data only)."""
+    """Show station departures via MOTIS API (schedule-based, ~1-2s)."""
     query = update.callback_query
     lang = get_lang(update)
     await query.answer(t("loading", lang))
@@ -253,8 +253,8 @@ async def metro_station_callback(update: Update,
     try:
         user_id = query.from_user.id
         is_fav = await is_favorite(user_id, "metro", station_name)
-        # Use fast local data (GTFS or frequency estimate) — no network call
-        departures = metro.get_next_departures(station_name)
+        # Try MOTIS API first (fast ~1-2s), fallback to local GTFS/estimate
+        departures = await metro.get_next_departures_async(station_name)
 
         text = _build_station_text(station_name, departures, lang)
 
@@ -285,32 +285,8 @@ async def metro_station_callback(update: Update,
 
 async def metro_station_realtime_callback(update: Update,
                                            context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Fetch real-time departures and update the same message."""
-    query = update.callback_query
-    lang = get_lang(update)
-    await query.answer(t("loading", lang))
-
-    station_name = query.data.split(":", 2)[-1]
-    try:
-        user_id = query.from_user.id
-        is_fav = await is_favorite(user_id, "metro", station_name)
-
-        departures = await metro.get_next_departures_async(station_name)
-
-        text = _build_station_text(station_name, departures, lang)
-
-        await query.edit_message_text(
-            text,
-            parse_mode="MarkdownV2",
-            reply_markup=metro_station_actions_keyboard(station_name, is_fav=is_fav, lang=lang),
-        )
-    except Exception:
-        logger.exception("Error in metro_station_realtime_callback for %s", station_name)
-        await query.edit_message_text(
-            t("error_load_station", lang).format(name=escape_md(station_name)),
-            parse_mode="MarkdownV2",
-            reply_markup=metro_menu_keyboard(lang),
-        )
+    """Alias — kept for backwards compat with metro:realtime: callback data."""
+    return await metro_station_callback(update, context)
 
 
 async def metro_station_lines_callback(update: Update,
