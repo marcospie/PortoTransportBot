@@ -14,7 +14,7 @@ from telegram.ext import (
 
 from bot.config import TELEGRAM_BOT_TOKEN
 from bot.database import init_db, close_db
-from bot.handlers import bus, favorites, inline, location, metro, routes, settings, start
+from bot.handlers import alerts, bus, favorites, inline, location, metro, routes, settings, start, trains
 from bot.services.metro import download_gtfs
 from bot.services.stcp import download_stcp_gtfs
 from bot.utils.i18n import get_lang, t
@@ -160,6 +160,7 @@ async def post_init(application: Application) -> None:
         BotCommand("favorites", "Os teus favoritos"),
         BotCommand("fav", "Favorito rápido"),
         BotCommand("settings", "Configurações"),
+        BotCommand("alertas", "Alertas de serviço"),
         BotCommand("help", "Ajuda"),
     ]
     en_commands = [
@@ -172,6 +173,7 @@ async def post_init(application: Application) -> None:
         BotCommand("favorites", "Your favorites"),
         BotCommand("fav", "Quick favorite"),
         BotCommand("settings", "Settings"),
+        BotCommand("alertas", "Service alerts"),
         BotCommand("help", "Help"),
     ]
 
@@ -272,6 +274,7 @@ def main() -> None:
     app.add_handler(CommandHandler("fav", favorites.fav_quick_command))
     app.add_handler(CommandHandler("route", routes.route_command))
     app.add_handler(CommandHandler("settings", settings.settings_command))
+    app.add_handler(CommandHandler("alertas", alerts.alertas_command))
 
     # Callback query handlers - menu navigation
     app.add_handler(CallbackQueryHandler(start.main_menu_callback, pattern=r"^menu:main$"))
@@ -300,6 +303,10 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(metro.metro_location_callback, pattern=r"^metro:loc:.+$"))
     app.add_handler(CallbackQueryHandler(metro.metro_station_callback, pattern=r"^metro:station:.+$"))
     app.add_handler(CallbackQueryHandler(metro.metro_station_lines_callback, pattern=r"^metro:station_lines:.+$"))
+
+    # Alerts callbacks
+    app.add_handler(CallbackQueryHandler(alerts.alerts_menu_callback, pattern=r"^menu:alerts$"))
+    app.add_handler(CallbackQueryHandler(alerts.alerts_filter_callback, pattern=r"^alerts:filter:.+$"))
 
     # Nearby refresh callback
     app.add_handler(CallbackQueryHandler(location.nearby_refresh_callback, pattern=r"^nearby:refresh$"))

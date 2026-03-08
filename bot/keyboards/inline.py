@@ -3,6 +3,8 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot.config import METRO_LINES
+from bot.services.cp import CP_LINES
+from bot.services.metrobus import METROBUS_LINES
 from bot.utils.i18n import t
 
 
@@ -13,13 +15,18 @@ def main_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(t("kb_buses", lang), callback_data="menu:bus"),
             InlineKeyboardButton(t("kb_metro", lang), callback_data="menu:metro"),
+            InlineKeyboardButton(t("kb_metrobus", lang), callback_data="menu:metrobus"),
         ],
+        [InlineKeyboardButton(t("kb_trains", lang), callback_data="menu:trains")],
         [InlineKeyboardButton(t("kb_plan_route", lang), callback_data="plan:route")],
         [
             InlineKeyboardButton(t("kb_favorites", lang), callback_data="menu:favorites"),
             InlineKeyboardButton(t("kb_settings", lang), callback_data="menu:settings"),
         ],
-        [InlineKeyboardButton(t("kb_help", lang), callback_data="menu:help")],
+        [
+            InlineKeyboardButton(t("kb_alerts", lang), callback_data="menu:alerts"),
+            InlineKeyboardButton(t("kb_help", lang), callback_data="menu:help"),
+        ],
         [InlineKeyboardButton(t("kb_quick_search", lang),
                               switch_inline_query_current_chat="")],
     ])
@@ -250,6 +257,65 @@ def metro_line_detail_keyboard(line_code: str, stations: list[str],
     return InlineKeyboardMarkup(buttons)
 
 
+# --- MetroBus Keyboards ---
+
+def metrobus_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("kb_search_metrobus_stop", lang),
+                              switch_inline_query_current_chat="metrobus ")],
+        [
+            InlineKeyboardButton(t("kb_lines", lang), callback_data="metrobus:lines"),
+            InlineKeyboardButton(t("kb_frequencies", lang), callback_data="metrobus:freq"),
+        ],
+        [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
+    ])
+
+
+def metrobus_stop_results_keyboard(stops: list[dict], lang: str = "pt") -> InlineKeyboardMarkup:
+    buttons = []
+    for stop in stops[:8]:
+        name = stop["name"]
+        lines_str = " ".join(l["emoji"] for l in stop["lines"])
+        label = f"\U0001f68d {name} {lines_str}"
+        if len(label) > 55:
+            label = f"\U0001f68d {name[:30]}... {lines_str}"
+        cb_data = f"metrobus:stop:{name}"
+        if len(cb_data.encode("utf-8")) <= 64:
+            buttons.append([
+                InlineKeyboardButton(label, callback_data=cb_data)
+            ])
+    buttons.append([InlineKeyboardButton(t("kb_back", lang), callback_data="menu:metrobus")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def metrobus_stop_actions_keyboard(stop_name: str, is_fav: bool = False, lang: str = "pt") -> InlineKeyboardMarkup:
+    if is_fav:
+        fav_button = InlineKeyboardButton(t("kb_unfavorite", lang), callback_data=f"fav:remove:metrobus:{stop_name}")
+    else:
+        fav_button = InlineKeyboardButton(t("kb_favorite", lang), callback_data=f"fav:add:metrobus:{stop_name}")
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("kb_refresh", lang), callback_data=f"metrobus:stop:{stop_name}")],
+        [
+            InlineKeyboardButton(t("kb_lines", lang), callback_data=f"metrobus:stop_lines:{stop_name}"),
+            InlineKeyboardButton(t("kb_map", lang), callback_data=f"metrobus:loc:{stop_name}"),
+        ],
+        [
+            fav_button,
+            InlineKeyboardButton(t("kb_back_menu", lang), callback_data="menu:metrobus"),
+        ],
+    ])
+
+
+def metrobus_lines_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    buttons = []
+    for code, data in METROBUS_LINES.items():
+        emoji = data["emoji"]
+        name = data["name"]
+        buttons.append([InlineKeyboardButton(f"{emoji} {name}", callback_data=f"metrobus:line:{code}")])
+    buttons.append([InlineKeyboardButton(t("kb_back", lang), callback_data="menu:metrobus")])
+    return InlineKeyboardMarkup(buttons)
+
+
 # --- Favorites Keyboards ---
 
 def favorites_keyboard(favorites: list[dict], lang: str = "pt") -> InlineKeyboardMarkup:
@@ -280,3 +346,81 @@ def favorites_keyboard(favorites: list[dict], lang: str = "pt") -> InlineKeyboar
 
     buttons.append([InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")])
     return InlineKeyboardMarkup(buttons)
+
+
+# --- Trains (CP) Keyboards ---
+
+def trains_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("kb_search_train_station", lang),
+                              switch_inline_query_current_chat="train ")],
+        [InlineKeyboardButton(t("kb_train_lines", lang), callback_data="train:lines")],
+        [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
+    ])
+
+
+def train_station_results_keyboard(stations: list[dict], lang: str = "pt") -> InlineKeyboardMarkup:
+    buttons = []
+    for station in stations[:8]:
+        name = station["name"]
+        lines_str = " ".join(l["emoji"] for l in station["lines"])
+        label = f"\U0001f686 {name} {lines_str}"
+        if len(label) > 55:
+            label = f"\U0001f686 {name[:30]}... {lines_str}"
+        cb_data = f"train:station:{name}"
+        if len(cb_data.encode("utf-8")) <= 64:
+            buttons.append([InlineKeyboardButton(label, callback_data=cb_data)])
+    buttons.append([InlineKeyboardButton(t("kb_back", lang), callback_data="menu:trains")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def train_station_actions_keyboard(station_name: str, is_fav: bool = False, lang: str = "pt") -> InlineKeyboardMarkup:
+    if is_fav:
+        fav_button = InlineKeyboardButton(t("kb_unfavorite", lang), callback_data=f"fav:remove:train:{station_name}")
+    else:
+        fav_button = InlineKeyboardButton(t("kb_favorite", lang), callback_data=f"fav:add:train:{station_name}")
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("kb_refresh", lang), callback_data=f"train:station:{station_name}")],
+        [
+            InlineKeyboardButton(t("kb_lines", lang), callback_data=f"train:station_lines:{station_name}"),
+            InlineKeyboardButton(t("kb_map", lang), callback_data=f"train:loc:{station_name}"),
+        ],
+        [
+            fav_button,
+            InlineKeyboardButton(t("kb_back_menu", lang), callback_data="menu:trains"),
+        ],
+    ])
+
+
+def train_lines_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    buttons = []
+    row = []
+    for lid, data in CP_LINES.items():
+        emoji = data["emoji"]
+        name = data["name"]
+        row.append(InlineKeyboardButton(f"{emoji} {name}", callback_data=f"train:line:{lid}"))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton(t("kb_back", lang), callback_data="menu:trains")])
+    return InlineKeyboardMarkup(buttons)
+
+
+# --- Alerts Keyboards ---
+
+def alerts_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build keyboard for the alerts view with filter buttons."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(t("kb_alert_all", lang), callback_data="alerts:filter:all"),
+            InlineKeyboardButton(t("kb_alert_delays", lang), callback_data="alerts:filter:delay"),
+        ],
+        [
+            InlineKeyboardButton(t("kb_alert_disruptions", lang), callback_data="alerts:filter:disruption"),
+            InlineKeyboardButton(t("kb_alert_engineering", lang), callback_data="alerts:filter:engineering"),
+        ],
+        [InlineKeyboardButton(t("kb_refresh", lang), callback_data="menu:alerts")],
+        [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
+    ])

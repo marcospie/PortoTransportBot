@@ -178,6 +178,75 @@ def format_metro_line_info(line_code: str, line_data: dict,
     return text
 
 
+def format_metrobus_schedule(stop_name: str, line_info: str,
+                             departures: list[dict]) -> str:
+    """Format MetroBus departure data into a compact Telegram message."""
+    header = f"\U0001f68d *{escape_md(stop_name)}*"
+    separator = "━━━━━━━━━━━━━━━━"
+
+    if not departures:
+        return (
+            f"{header}\n"
+            f"{line_info}\n"
+            f"{separator}\n\n"
+            "Sem informação de horários disponível\\."
+        )
+
+    is_estimated = any(d.get("estimated") for d in departures)
+
+    lines = [header]
+    if line_info:
+        lines.append(line_info)
+    lines.append(separator)
+    lines.append("")
+
+    for dep in departures:
+        direction = escape_md(dep.get("direction", "?"))
+        time_str = dep.get("time", "?")
+        lines.append(f"*{direction}*  —  `{escape_md(time_str)}`")
+
+    timestamp = escape_md(datetime.now().strftime("%H:%M"))
+    lines.append("")
+    if is_estimated:
+        lines.append(f"_Estimativa  ·  {timestamp}_")
+    else:
+        lines.append(f"_Atualizado às {timestamp}_")
+
+    return "\n".join(lines)
+
+
+def format_metrobus_line_info(line_code: str, line_data: dict,
+                               stops: list[str],
+                               stops_data: dict | None = None) -> str:
+    """Format MetroBus line information with a visual stop map."""
+    from bot.services.metrobus import METROBUS_LINES as _METROBUS_LINES
+
+    emoji = line_data.get("emoji", "\U0001f68d")
+    name = line_data.get("name", f"Linha {line_code}")
+    route = line_data.get("route", "")
+
+    lines = [f"{emoji} *{escape_md(name)}*"]
+    if route:
+        lines.append(f"_{escape_md(route)}_\n")
+
+    for i, stop_name in enumerate(stops):
+        escaped_name = escape_md(stop_name)
+        if i == 0 or i == len(stops) - 1:
+            lines.append(f"  {emoji} *{escaped_name}*")
+        else:
+            lines.append(f"  {emoji} {escaped_name}")
+
+        if i < len(stops) - 1:
+            lines.append("  │")
+
+    lines.append(f"\n📊 {len(stops)} paragens")
+
+    text = "\n".join(lines)
+    if len(text) > 4000:
+        text = text[:3950] + "\n\n\\.\\.\\. _\\(lista truncada\\)_"
+    return text
+
+
 def escape_md(text: str) -> str:
     """Escape special characters for Telegram MarkdownV2."""
     special_chars = r"_*[]()~`>#+-=|{}.!"
