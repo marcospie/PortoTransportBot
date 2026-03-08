@@ -26,6 +26,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def error_handler(update: object, context) -> None:
+    """Global error handler for unhandled exceptions."""
+    logger.error("Unhandled exception:", exc_info=context.error)
+    if update and isinstance(update, Update):
+        try:
+            if update.callback_query:
+                await update.callback_query.answer("Erro interno. Tenta novamente.")
+            elif update.effective_message:
+                await update.effective_message.reply_text(
+                    "Ocorreu um erro. Tenta novamente ou usa /start.")
+        except Exception:
+            pass
+
+
 async def unknown_callback(update: Update, context) -> None:
     """Catch-all for unmatched callback queries (stale buttons, etc.)."""
     lang = get_lang(update)
@@ -449,6 +463,9 @@ def main() -> None:
 
     # Catch-all for unmatched callback queries (stale buttons, etc.)
     app.add_handler(CallbackQueryHandler(unknown_callback))
+
+    # Global error handler for unhandled exceptions
+    app.add_error_handler(error_handler)
 
     logger.info("Bot starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

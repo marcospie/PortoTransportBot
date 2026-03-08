@@ -41,29 +41,46 @@ _playwright_available: Optional[bool] = None
 
 
 def _check_playwright() -> bool:
-    """Check if Playwright is installed and usable."""
+    """Check if Playwright is installed and the Chromium binary exists."""
     global _playwright_available
     if _playwright_available is not None:
         return _playwright_available
     try:
-        import playwright  # noqa: F401
-        _playwright_available = True
+        import subprocess
+        result = subprocess.run(
+            ["python3", "-c",
+             "from playwright.sync_api import sync_playwright; "
+             "pw = sync_playwright().start(); "
+             "import os; p = pw.chromium.executable_path; pw.stop(); "
+             "exit(0 if os.path.exists(p) else 1)"],
+            capture_output=True, timeout=10,
+        )
+        if result.returncode != 0:
+            logger.warning("Chromium binary not found. Run: playwright install chromium")
+            _playwright_available = False
+        else:
+            _playwright_available = True
     except ImportError:
-        logger.warning("Playwright not installed — real-time metro data unavailable. "
-                       "Install with: pip install playwright && playwright install chromium")
+        logger.warning("Playwright not installed — real-time metro data unavailable.")
+        _playwright_available = False
+    except Exception:
+        logger.warning("Playwright check failed — disabling real-time data", exc_info=True)
         _playwright_available = False
     return _playwright_available
 
 
+_pw_context = None  # Keep reference to prevent GC
+
+
 async def _get_browser():
     """Get or create a shared Playwright browser instance."""
-    global _browser
+    global _browser, _pw_context
     async with _browser_lock:
         if _browser and _browser.is_connected():
             return _browser
         from playwright.async_api import async_playwright
-        pw = await async_playwright().start()
-        _browser = await pw.chromium.launch(headless=True)
+        _pw_context = await async_playwright().start()
+        _browser = await _pw_context.chromium.launch(headless=True)
         return _browser
 
 
