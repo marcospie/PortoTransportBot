@@ -123,7 +123,8 @@ def match_score(query: str, name: str) -> float:
             if qt == nt:
                 matched += 1
                 break
-            elif qt in nt or nt in qt:
+            # Substring match only if both tokens are long enough (>=3 chars)
+            elif len(qt) >= 3 and len(nt) >= 3 and (qt in nt or nt in qt):
                 matched += 0.7
                 break
 

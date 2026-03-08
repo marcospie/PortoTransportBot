@@ -65,18 +65,21 @@ async def bus_menu_callback(update: Update,
 
 async def bus_find_callback(update: Update,
                              context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Prompt user to enter stop name or code (unified find)."""
+    """Redirect user to inline mode for live bus stop autocomplete."""
     query = update.callback_query
     await query.answer()
-    context.user_data[AWAITING_BUS_FIND] = datetime.now()
-    # Clean up legacy keys
-    context.user_data.pop(AWAITING_BUS_SEARCH, None)
-    context.user_data.pop(AWAITING_BUS_CODE, None)
+    _clear_awaiting(context)
     await query.edit_message_text(
-        "🔍 *Encontrar paragem*\n\nEnvia o nome ou código da paragem:\n"
-        "Exemplo: `Bolhão`, `BCM2`, `Casa da Música`",
+        "🔍 *Encontrar paragem*\n\n"
+        "Toca no botão abaixo e começa a escrever \\- "
+        "as sugestões aparecem enquanto digitas\\!\n\n"
+        "Exemplo: `BIBG` → BIBG1, BIBG2 \\| `Casa` → Casa da Música",
         parse_mode="MarkdownV2",
-        reply_markup=cancel_keyboard(),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔍 Escrever nome ou código...",
+                                  switch_inline_query_current_chat="bus ")],
+            [InlineKeyboardButton("🔙 Voltar", callback_data="menu:bus")],
+        ]),
     )
 
 
@@ -89,18 +92,21 @@ async def bus_search_callback(update: Update,
 
 async def bus_code_callback(update: Update,
                              context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Prompt user to enter stop code."""
+    """Redirect user to inline mode for stop code autocomplete."""
     query = update.callback_query
     await query.answer()
-    context.user_data[AWAITING_BUS_FIND] = datetime.now()
-    context.user_data.pop(AWAITING_BUS_SEARCH, None)
-    context.user_data.pop(AWAITING_BUS_CODE, None)
+    _clear_awaiting(context)
     await query.edit_message_text(
         "🔢 *Consultar por código*\n\n"
-        "Envia o código da paragem:\n"
-        "Exemplo: `BCM2`, `TRD1`, `BIBG2`",
+        "Toca no botão abaixo e escreve o código \\- "
+        "as sugestões aparecem enquanto digitas\\!\n\n"
+        "Exemplo: `BCM` → BCM1, BCM2 \\| `TRD` → TRD1, TRD2",
         parse_mode="MarkdownV2",
-        reply_markup=cancel_keyboard(),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔍 Escrever código da paragem...",
+                                  switch_inline_query_current_chat="bus ")],
+            [InlineKeyboardButton("🔙 Voltar", callback_data="menu:bus")],
+        ]),
     )
 
 

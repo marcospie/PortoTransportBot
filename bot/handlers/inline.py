@@ -6,6 +6,7 @@ from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import ContextTypes
 
 from bot.services import stcp
+from bot.services.stcp import search_stops_local
 from bot.services.metro import search_stations, get_next_departures
 from bot.utils.formatting import escape_md
 
@@ -62,17 +63,9 @@ async def inline_query_handler(update: Update,
         await update.inline_query.answer(results, cache_time=300)
         return
 
-    # Check if it looks like a stop code
-    is_code = len(query) <= 6 and any(c.isdigit() for c in query)
-
     if mode in ("all", "bus"):
-        if is_code:
-            await _add_bus_stop_by_code(query.upper(), results)
-            # Fallback: if code lookup returned nothing, try name search too
-            if not results:
-                await _add_bus_stops_quick(query, results)
-        else:
-            await _add_bus_stops_quick(query, results)
+        # Always try fuzzy local search (handles both codes and names)
+        await _add_bus_stops_quick(query, results)
 
     if mode in ("all", "metro"):
         _add_metro_stations_quick(query, results)
@@ -84,7 +77,7 @@ async def inline_query_handler(update: Update,
             "Tenta outro nome ou código",
         ))
 
-    await update.inline_query.answer(results[:15], cache_time=30,
+    await update.inline_query.answer(results[:15], cache_time=5,
                                       is_personal=False)
 
 
@@ -135,10 +128,16 @@ async def _add_bus_stop_by_code(stop_code: str, results: list) -> None:
 
 
 async def _add_bus_stops_quick(query: str, results: list) -> None:
-    """Search bus stops by name - quick mode for autocomplete (no real-time data)."""
+    """Search bus stops by name - quick mode for autocomplete (no real-time data).
+
+    Uses local GTFS data for instant results, falls back to API.
+    """
     try:
-        stops = await stcp.search_stops(query)
-        for stop in stops[:5]:
+        # Local fuzzy search first (instant, no API call)
+        stops = search_stops_local(query, max_results=8)
+        if not stops:
+            stops = await stcp.search_stops(query)
+        for stop in stops[:8]:
             stop_code = stop.get("code", stop.get("stop_id", ""))
             stop_name = stop.get("name", "")
             zone = stop.get("zone", "")
@@ -168,7 +167,7 @@ def _add_metro_stations_quick(query: str, results: list) -> None:
     """Search metro stations - quick mode for autocomplete."""
     try:
         stations = search_stations(query)
-        for station in stations[:5]:
+        for station in stations[:8]:
             name = station["name"]
             line_emojis = " ".join(
                 l["emoji"] for l in station.get("lines", [])

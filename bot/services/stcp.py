@@ -44,6 +44,61 @@ async def _get(path: str, params: dict | None = None,
     return data
 
 
+def search_stops_local(query: str, max_results: int = 10) -> list[dict]:
+    """Search bus stops locally using GTFS data with fuzzy matching.
+
+    Works offline - no API call needed. Good for autocomplete.
+    """
+    if not _gtfs_bus_stops or not query.strip():
+        return []
+
+    from bot.utils.search import fuzzy_search
+
+    names_map: dict[str, dict] = {}
+    for stop in _gtfs_bus_stops:
+        key = f"{stop['name']} ({stop['stop_id']})"
+        names_map[key] = stop
+
+    # Also try matching against stop_id directly
+    query_upper = query.strip().upper()
+    code_matches = []
+    for stop in _gtfs_bus_stops:
+        if stop["stop_id"].upper().startswith(query_upper):
+            code_matches.append(stop)
+
+    # Fuzzy match on names
+    name_results = fuzzy_search(query, list(names_map.keys()),
+                                min_score=15, max_results=max_results)
+
+    results = []
+    seen_ids: set[str] = set()
+
+    # Code matches first (exact prefix on stop code)
+    for stop in code_matches[:max_results]:
+        if stop["stop_id"] not in seen_ids:
+            seen_ids.add(stop["stop_id"])
+            results.append({
+                "stop_id": stop["stop_id"],
+                "name": stop["name"],
+                "code": stop["stop_id"],
+                "zone": "",
+            })
+
+    # Then fuzzy name matches
+    for key, _score in name_results:
+        stop = names_map[key]
+        if stop["stop_id"] not in seen_ids:
+            seen_ids.add(stop["stop_id"])
+            results.append({
+                "stop_id": stop["stop_id"],
+                "name": stop["name"],
+                "code": stop["stop_id"],
+                "zone": "",
+            })
+
+    return results[:max_results]
+
+
 async def search_stops(query: str) -> list[dict]:
     """Search for bus stops by name. Returns list of matching stops."""
     try:
@@ -59,8 +114,8 @@ async def search_stops(query: str) -> list[dict]:
             for s in results[:20]
         ]
     except Exception:
-        logger.exception("Error searching stops")
-        return []
+        logger.debug("API search failed, falling back to local GTFS search")
+        return search_stops_local(query)
 
 
 async def get_stop_real_time(stop_id: str) -> dict:

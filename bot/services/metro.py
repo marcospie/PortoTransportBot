@@ -252,6 +252,16 @@ def get_next_departures(station_name: str, line_code: str | None = None,
 
     Uses GTFS data if available, otherwise calculates based on known frequencies.
     """
+    station_data = STATIONS.get(station_name)
+    if not station_data:
+        from bot.utils.search import fuzzy_search
+        matches = fuzzy_search(station_name, list(STATIONS.keys()), min_score=40, max_results=1)
+        if matches:
+            station_name = matches[0][0]
+            station_data = STATIONS[station_name]
+    if not station_data:
+        return []
+
     now = datetime.now()
     current_time = now.time()
 
@@ -262,16 +272,6 @@ def get_next_departures(station_name: str, line_code: str | None = None,
             "time": f"Funcionamento: {OPERATING_HOURS['start'].strftime('%H:%M')} - {OPERATING_HOURS['end'].strftime('%H:%M')}",
             "line": "",
         }]
-
-    station_data = STATIONS.get(station_name)
-    if not station_data:
-        from bot.utils.search import fuzzy_search
-        matches = fuzzy_search(station_name, list(STATIONS.keys()), min_score=40, max_results=1)
-        if matches:
-            station_name = matches[0][0]
-            station_data = STATIONS[station_name]
-    if not station_data:
-        return []
 
     # Get applicable frequency
     freq_type = _get_frequency_type(now)

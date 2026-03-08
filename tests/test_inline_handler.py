@@ -35,20 +35,17 @@ class TestInlineQueryHandler:
         update.inline_query.answer = AsyncMock()
         context = MagicMock()
 
-        with patch("bot.handlers.inline.stcp") as mock_stcp, \
+        with patch("bot.handlers.inline.search_stops_local", return_value=[
+                 {"code": "BCM2", "stop_id": "BCM2", "name": "Boavista - Casa da Música", "zone": ""},
+             ]), \
+             patch("bot.handlers.inline.stcp") as mock_stcp, \
              patch("bot.handlers.inline.search_stations", return_value=[]):
-            mock_stcp.get_stop_real_time = AsyncMock(return_value={
-                "stop_name": "Boavista",
-                "arrivals": [
-                    {"line": "204", "destination": "Marquês", "time": "3 min"},
-                ],
-            })
 
             await inline_query_handler(update, context)
 
         update.inline_query.answer.assert_called_once()
         results = update.inline_query.answer.call_args[0][0]
-        assert any("BCM2" in r.title for r in results)
+        assert any("Boavista" in r.title for r in results)
 
     @pytest.mark.asyncio
     async def test_name_query_searches_metro_and_bus(self):
@@ -58,6 +55,7 @@ class TestInlineQueryHandler:
         context = MagicMock()
 
         with patch("bot.handlers.inline.search_stations") as mock_search, \
+             patch("bot.handlers.inline.search_stops_local", return_value=[]), \
              patch("bot.handlers.inline.stcp") as mock_stcp:
             mock_search.return_value = [{
                 "name": "Trindade",
@@ -79,11 +77,11 @@ class TestInlineQueryHandler:
         update.inline_query.answer = AsyncMock()
         context = MagicMock()
 
-        with patch("bot.handlers.inline.stcp") as mock_stcp, \
+        with patch("bot.handlers.inline.search_stops_local", return_value=[
+                 {"code": "BLH1", "stop_id": "BLH1", "name": "Bolhão", "zone": "PRT"},
+             ]), \
+             patch("bot.handlers.inline.stcp") as mock_stcp, \
              patch("bot.handlers.inline.search_stations") as mock_metro:
-            mock_stcp.search_stops = AsyncMock(return_value=[
-                {"code": "BLH1", "stop_id": "BLH1", "name": "Bolhão", "zone": "PRT"},
-            ])
 
             await inline_query_handler(update, context)
 

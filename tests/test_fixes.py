@@ -118,8 +118,8 @@ class TestInlineQueryFallback:
         assert len(results) >= 1
 
     @pytest.mark.asyncio
-    async def test_code_lookup_success_no_fallback(self):
-        """If code lookup succeeds, no fallback search needed."""
+    async def test_code_lookup_via_fuzzy(self):
+        """Stop code like BCM2 should be found via fuzzy local search."""
         from bot.handlers.inline import inline_query_handler
 
         update = MagicMock()
@@ -127,24 +127,22 @@ class TestInlineQueryFallback:
         update.inline_query.answer = AsyncMock()
         context = MagicMock()
 
-        with patch("bot.handlers.inline.stcp") as mock_stcp, \
+        with patch("bot.handlers.inline.search_stops_local", return_value=[
+                 {"code": "BCM2", "stop_id": "BCM2", "name": "Boavista - Casa da Música", "zone": ""},
+             ]) as mock_local, \
+             patch("bot.handlers.inline.stcp") as mock_stcp, \
              patch("bot.handlers.inline.search_stations", return_value=[]):
-            mock_stcp.get_stop_real_time = AsyncMock(return_value={
-                "stop_name": "Boavista",
-                "arrivals": [{"line": "204", "destination": "Marquês", "time": "3 min"}],
-            })
 
             await inline_query_handler(update, context)
 
         update.inline_query.answer.assert_called_once()
         results = update.inline_query.answer.call_args[0][0]
-        assert any("BCM2" in r.title for r in results)
-        # search_stops should NOT have been called
-        mock_stcp.search_stops.assert_not_called()
+        assert any("BCM2" in r.description or "Boavista" in r.title for r in results)
+        mock_local.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_bus_prefix_code_fallback(self):
-        """'bus BIBG2' should fallback to name search if code fails."""
+        """'bus BIBG2' should find stops via fuzzy search."""
         from bot.handlers.inline import inline_query_handler
 
         update = MagicMock()
@@ -152,20 +150,18 @@ class TestInlineQueryFallback:
         update.inline_query.answer = AsyncMock()
         context = MagicMock()
 
-        with patch("bot.handlers.inline.stcp") as mock_stcp, \
+        with patch("bot.handlers.inline.search_stops_local", return_value=[
+                 {"code": "BIBG2", "stop_id": "BIBG2", "name": "Biblioteca de Gaia 2", "zone": ""},
+             ]) as mock_local, \
+             patch("bot.handlers.inline.stcp") as mock_stcp, \
              patch("bot.handlers.inline.search_stations", return_value=[]):
-            mock_stcp.get_stop_real_time = AsyncMock(return_value={
-                "stop_name": "BIBG2",
-                "arrivals": [],
-            })
-            mock_stcp.search_stops = AsyncMock(return_value=[
-                {"code": "BIBG2", "stop_id": "BIBG2", "name": "Bom Sucesso", "zone": "PRT"},
-            ])
 
             await inline_query_handler(update, context)
 
-        # search_stops should have been called as fallback
-        mock_stcp.search_stops.assert_called_once()
+        update.inline_query.answer.assert_called_once()
+        results = update.inline_query.answer.call_args[0][0]
+        assert len(results) >= 1
+        mock_local.assert_called_once()
 
 
 # ===================================================================

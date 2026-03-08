@@ -63,15 +63,21 @@ async def metro_menu_callback(update: Update,
 
 async def metro_search_callback(update: Update,
                                   context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Prompt user to search for a metro station."""
+    """Redirect user to inline mode for live station autocomplete."""
     query = update.callback_query
     await query.answer()
-    context.user_data[AWAITING_METRO_SEARCH] = datetime.now()
+    _clear_awaiting(context)
     await query.edit_message_text(
-        "🔍 *Pesquisar estação*\n\nEnvia o nome da estação de metro\\.\n"
-        "Exemplo: `Trindade`, `Bolhão`, `Aeroporto`",
+        "🔍 *Pesquisar estação*\n\n"
+        "Toca no botão abaixo e começa a escrever \\- "
+        "as sugestões aparecem enquanto digitas\\!\n\n"
+        "Exemplo: `Trind` → Trindade, `Bol` → Bolhão",
         parse_mode="MarkdownV2",
-        reply_markup=cancel_keyboard("menu:metro"),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔍 Escrever nome da estação...",
+                                  switch_inline_query_current_chat="metro ")],
+            [InlineKeyboardButton("🔙 Voltar", callback_data="menu:metro")],
+        ]),
     )
 
 

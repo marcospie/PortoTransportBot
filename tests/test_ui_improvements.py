@@ -89,7 +89,7 @@ class TestClearAwaiting:
 
 class TestBusFindCallback:
     @pytest.mark.asyncio
-    async def test_sets_awaiting_flag_as_datetime(self):
+    async def test_redirects_to_inline_mode(self):
         from bot.handlers.bus import bus_find_callback
 
         query = AsyncMock()
@@ -101,8 +101,17 @@ class TestBusFindCallback:
 
         await bus_find_callback(update, context)
 
-        assert "awaiting_bus_find" in context.user_data
-        assert isinstance(context.user_data["awaiting_bus_find"], datetime)
+        # Should redirect to inline mode, not set awaiting flag
+        assert "awaiting_bus_find" not in context.user_data
+        query.edit_message_text.assert_called_once()
+        # Check that the inline keyboard has switch_inline_query_current_chat
+        call_kwargs = query.edit_message_text.call_args[1]
+        reply_markup = call_kwargs["reply_markup"]
+        assert any(
+            btn.switch_inline_query_current_chat is not None
+            for row in reply_markup.inline_keyboard
+            for btn in row
+        )
 
 
 class TestBusTextInputAutoDetect:
@@ -232,7 +241,7 @@ class TestBusMenuMerged:
 
 class TestMetroSearchCallback:
     @pytest.mark.asyncio
-    async def test_sets_timestamp_and_shows_cancel(self):
+    async def test_redirects_to_inline_mode(self):
         from bot.handlers.metro import metro_search_callback
 
         query = AsyncMock()
@@ -244,7 +253,13 @@ class TestMetroSearchCallback:
 
         await metro_search_callback(update, context)
 
-        assert isinstance(context.user_data["awaiting_metro_search"], datetime)
-        # Check that edit_message_text was called with a reply_markup
+        # Should redirect to inline mode, not set awaiting flag
+        assert "awaiting_metro_search" not in context.user_data
+        query.edit_message_text.assert_called_once()
         call_kwargs = query.edit_message_text.call_args[1]
-        assert call_kwargs.get("reply_markup") is not None
+        reply_markup = call_kwargs["reply_markup"]
+        assert any(
+            btn.switch_inline_query_current_chat is not None
+            for row in reply_markup.inline_keyboard
+            for btn in row
+        )
