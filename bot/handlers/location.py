@@ -7,7 +7,7 @@ from telegram.ext import ContextTypes
 
 from bot.database import get_user_settings
 from bot.keyboards.inline import main_menu_keyboard
-from bot.services import metro, stcp
+from bot.services import metro, metrobus, stcp
 from bot.utils.formatting import escape_md
 from bot.utils.i18n import t, get_lang
 
@@ -44,10 +44,13 @@ async def location_handler(update: Update,
     # Find nearby metro stations
     nearby_stations = metro.get_nearby_stations(lat, lon, metro_radius_km)
 
+    # Find nearby MetroBus stops
+    nearby_metrobus = metrobus.get_nearby_stops(lat, lon, metro_radius_km)
+
     # Try to find nearby bus stops via STCP API
     nearby_bus = await _get_nearby_bus_stops(lat, lon, bus_radius_km)
 
-    if not nearby_stations and not nearby_bus:
+    if not nearby_stations and not nearby_metrobus and not nearby_bus:
         radius_display = max(user_settings["metro_radius_m"], user_settings["bus_radius_m"])
         await update.message.reply_text(
             t("nearby_empty", lang).format(radius=radius_display),
@@ -78,6 +81,26 @@ async def location_handler(update: Update,
             buttons.append([
                 InlineKeyboardButton(label, callback_data=f"metro:station:{name}")
             ])
+
+    # MetroBus stops
+    if nearby_metrobus:
+        lines.append(f"\n\U0001f68d *{t('metrobus_stops', lang)}:*\n")
+        for stop in nearby_metrobus[:max_results]:
+            name = stop["name"]
+            dist = stop["distance_m"]
+            lines_names = " ".join(f'{l_["emoji"]}{l_["code"]}' for l_ in stop["lines"])
+            lines.append(
+                f"  \U0001f68d *{escape_md(name)}* \\- {dist}m\n"
+                f"      {lines_names}"
+            )
+            label = f"\U0001f68d {name} ({dist}m)"
+            if len(label) > 50:
+                label = f"\U0001f68d {name[:30]}... ({dist}m)"
+            cb_data = f"metrobus:stop:{name}"
+            if len(cb_data.encode("utf-8")) <= 64:
+                buttons.append([
+                    InlineKeyboardButton(label, callback_data=cb_data)
+                ])
 
     # Bus stops
     if nearby_bus:
@@ -144,10 +167,13 @@ async def nearby_refresh_callback(update: Update,
     # Find nearby metro stations
     nearby_stations = metro.get_nearby_stations(lat, lon, metro_radius_km)
 
+    # Find nearby MetroBus stops
+    nearby_metrobus = metrobus.get_nearby_stops(lat, lon, metro_radius_km)
+
     # Try to find nearby bus stops via STCP API
     nearby_bus = await _get_nearby_bus_stops(lat, lon, bus_radius_km)
 
-    if not nearby_stations and not nearby_bus:
+    if not nearby_stations and not nearby_metrobus and not nearby_bus:
         radius_display = max(user_settings["metro_radius_m"], user_settings["bus_radius_m"])
         await query.edit_message_text(
             t("nearby_empty", lang).format(radius=radius_display),
@@ -177,6 +203,26 @@ async def nearby_refresh_callback(update: Update,
             buttons.append([
                 InlineKeyboardButton(label, callback_data=f"metro:station:{name}")
             ])
+
+    # MetroBus stops
+    if nearby_metrobus:
+        lines.append(f"\n\U0001f68d *{t('metrobus_stops', lang)}:*\n")
+        for stop in nearby_metrobus[:max_results]:
+            name = stop["name"]
+            dist = stop["distance_m"]
+            lines_names = " ".join(f'{l_["emoji"]}{l_["code"]}' for l_ in stop["lines"])
+            lines.append(
+                f"  \U0001f68d *{escape_md(name)}* \\- {dist}m\n"
+                f"      {lines_names}"
+            )
+            label = f"\U0001f68d {name} ({dist}m)"
+            if len(label) > 50:
+                label = f"\U0001f68d {name[:30]}... ({dist}m)"
+            cb_data = f"metrobus:stop:{name}"
+            if len(cb_data.encode("utf-8")) <= 64:
+                buttons.append([
+                    InlineKeyboardButton(label, callback_data=cb_data)
+                ])
 
     # Bus stops
     if nearby_bus:

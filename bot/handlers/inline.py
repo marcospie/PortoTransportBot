@@ -8,6 +8,7 @@ from telegram.ext import ContextTypes
 from bot.services import stcp
 from bot.services.stcp import search_stops_local
 from bot.services.metro import search_stations, get_next_departures
+from bot.services.metrobus import search_stops as search_metrobus_stops
 from bot.utils.formatting import escape_md
 
 
@@ -46,6 +47,9 @@ async def inline_query_handler(update: Update,
     elif raw_query.lower().startswith("metro "):
         mode = "metro"
         query = raw_query[6:].strip()
+    elif raw_query.lower().startswith("metrobus "):
+        mode = "metrobus"
+        query = raw_query[9:].strip()
 
     if not query:
         if mode == "bus":
@@ -60,6 +64,12 @@ async def inline_query_handler(update: Update,
                 "Continua a escrever o nome da estação...",
                 "Exemplo: Trindade, Bolhão",
             ))
+        elif mode == "metrobus":
+            results.append(_hint_article(
+                "\U0001f68d Pesquisar MetroBus",
+                "Continua a escrever o nome da paragem...",
+                "Exemplo: Boavista, Campanhã",
+            ))
         await update.inline_query.answer(results, cache_time=300)
         return
 
@@ -69,6 +79,9 @@ async def inline_query_handler(update: Update,
 
     if mode in ("all", "metro"):
         _add_metro_stations_quick(query, results)
+
+    if mode in ("all", "metrobus"):
+        _add_metrobus_stops_quick(query, results)
 
     if not results:
         results.append(_hint_article(
@@ -190,6 +203,42 @@ def _add_metro_stations_quick(query: str, results: list) -> None:
                 id=str(uuid.uuid4()),
                 title=f"🚇 {name}",
                 description=f"{line_emojis}{zone_text}",
+                input_message_content=InputTextMessageContent(
+                    message_text=text,
+                    parse_mode="MarkdownV2",
+                ),
+            ))
+    except Exception:
+        pass
+
+
+def _add_metrobus_stops_quick(query: str, results: list) -> None:
+    """Search MetroBus stops - quick mode for autocomplete."""
+    try:
+        stops = search_metrobus_stops(query)
+        for stop in stops[:8]:
+            name = stop["name"]
+            line_emojis = " ".join(
+                l["emoji"] for l in stop.get("lines", [])
+            )
+            zone = stop.get("zone", "")
+            zone_text = f" \u00b7 Zona {zone}" if zone else ""
+
+            lines_names = ", ".join(
+                l["name"] for l in stop.get("lines", [])
+            )
+
+            text = (
+                f"\U0001f68d *{escape_md(name)}*\n"
+                f"{escape_md(line_emojis)}\n\n"
+                f"Linhas: {escape_md(lines_names)}\n\n"
+                f"Para ver hor\u00e1rios, envia `/metrobus` no chat\\."
+            )
+
+            results.append(InlineQueryResultArticle(
+                id=str(uuid.uuid4()),
+                title=f"\U0001f68d {name}",
+                description=f"MetroBus{zone_text}",
                 input_message_content=InputTextMessageContent(
                     message_text=text,
                     parse_mode="MarkdownV2",
