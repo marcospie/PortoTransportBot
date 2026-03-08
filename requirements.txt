@@ -6,3 +6,6 @@ aiofiles==24.1.0
 asyncpg==0.30.0
 flask>=3.0.0
 requests>=2.31.0
+# Optional: enables real-time metro departures via metrodoporto.pt scraping
+# After pip install, also run: playwright install chromium
+playwright>=1.40.0

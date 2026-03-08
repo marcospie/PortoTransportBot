@@ -220,7 +220,7 @@ async def metro_station_callback(update: Update,
     try:
         user_id = query.from_user.id
         is_fav = await is_favorite(user_id, "metro", station_name)
-        departures = metro.get_next_departures(station_name)
+        departures = await metro.get_next_departures_async(station_name)
 
         station_data = metro.STATIONS.get(station_name, {})
         lines_info = []
@@ -237,7 +237,10 @@ async def metro_station_callback(update: Update,
             zone_display = get_zone_display(zone)
             text += f"\n\n{t('zone_info', lang).format(zone=escape_md(zone_display))}"
 
-        if departures and departures[0].get("estimated"):
+        has_realtime = departures and departures[0].get("realtime")
+        if has_realtime:
+            text += f"\n\n{t('metro_realtime_note', lang)}"
+        elif departures and departures[0].get("estimated"):
             text += f"\n\n{t('metro_estimated_warning', lang)}"
         elif departures and not departures[0].get("estimated") and departures[0].get("line"):
             text += f"\n\n{t('metro_scheduled_note', lang)}"
@@ -383,7 +386,7 @@ async def _search_and_show_stations(message, query: str, context=None, lang: str
     if len(stations) == 1:
         # Single result - show departures directly
         station = stations[0]
-        departures = metro.get_next_departures(station["name"])
+        departures = await metro.get_next_departures_async(station["name"])
 
         lines_info = []
         for l in station["lines"]:
@@ -391,7 +394,10 @@ async def _search_and_show_stations(message, query: str, context=None, lang: str
         line_info_str = " \\| ".join(escape_md(li) for li in lines_info)
 
         text = format_metro_schedule(station["name"], line_info_str, departures)
-        if departures and departures[0].get("estimated"):
+        has_realtime = departures and departures[0].get("realtime")
+        if has_realtime:
+            text += f"\n\n{t('metro_realtime_note', lang)}"
+        elif departures and departures[0].get("estimated"):
             text += f"\n\n{t('metro_estimated_warning', lang)}"
         elif departures and not departures[0].get("estimated") and departures[0].get("line"):
             text += f"\n\n{t('metro_scheduled_note', lang)}"

@@ -364,6 +364,24 @@ def get_station_lines(station_name: str) -> list[dict]:
     ]
 
 
+async def get_next_departures_async(station_name: str,
+                                     line_code: str | None = None,
+                                     count: int = 5) -> list[dict]:
+    """Get next departures, trying real-time data first.
+
+    Priority: real-time (trip planner) > GTFS schedule > frequency estimate.
+    """
+    try:
+        from bot.services.metro_realtime import get_realtime_departures
+        rt = await get_realtime_departures(station_name, count=count)
+        if rt:
+            return rt
+    except Exception:
+        logger.debug("Real-time data unavailable, falling back to schedule",
+                     exc_info=True)
+    return get_next_departures(station_name, line_code, count)
+
+
 def get_next_departures(station_name: str, line_code: str | None = None,
                         count: int = 5) -> list[dict]:
     """Estimate next departures from a station.
