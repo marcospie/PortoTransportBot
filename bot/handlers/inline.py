@@ -5,7 +5,10 @@ import logging
 import re
 import uuid
 
-from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
+from telegram import (
+    InlineKeyboardButton, InlineKeyboardMarkup,
+    InlineQueryResultArticle, InputTextMessageContent, Update,
+)
 from telegram.ext import ContextTypes
 
 from bot.services import stcp
@@ -248,12 +251,19 @@ def _add_metro_stations_quick(query: str, results: list) -> None:
                 l["name"] for l in station.get("lines", [])
             )
 
+            # Show station info with a button to get live departures
             text = (
                 f"🚇 *{escape_md(name)}*\n"
                 f"{escape_md(line_emojis)}\n\n"
-                f"Linhas: {escape_md(lines_names)}\n\n"
-                f"Para ver horários, envia `/station {escape_md(name)}` no chat\\."
+                f"Linhas: {escape_md(lines_names)}"
             )
+
+            reply_markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "🕐 Ver horários",
+                    callback_data=f"metro:station:{name}",
+                )],
+            ])
 
             results.append(InlineQueryResultArticle(
                 id=str(uuid.uuid4()),
@@ -263,6 +273,7 @@ def _add_metro_stations_quick(query: str, results: list) -> None:
                     message_text=text,
                     parse_mode="MarkdownV2",
                 ),
+                reply_markup=reply_markup,
             ))
     except Exception:
         logger.exception("Error searching metro stations for query: %s", query)
@@ -287,9 +298,15 @@ def _add_metrobus_stops_quick(query: str, results: list) -> None:
             text = (
                 f"\U0001f68d *{escape_md(name)}*\n"
                 f"{escape_md(line_emojis)}\n\n"
-                f"Linhas: {escape_md(lines_names)}\n\n"
-                f"Para ver hor\u00e1rios, envia `/metrobus` no chat\\."
+                f"Linhas: {escape_md(lines_names)}"
             )
+
+            reply_markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "🕐 Ver horários",
+                    callback_data=f"metrobus:stop:{name}",
+                )],
+            ])
 
             results.append(InlineQueryResultArticle(
                 id=str(uuid.uuid4()),
@@ -299,6 +316,7 @@ def _add_metrobus_stops_quick(query: str, results: list) -> None:
                     message_text=text,
                     parse_mode="MarkdownV2",
                 ),
+                reply_markup=reply_markup,
             ))
     except Exception:
         logger.exception("Error searching MetroBus stops for query: %s", query)
