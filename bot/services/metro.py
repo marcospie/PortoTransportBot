@@ -188,44 +188,50 @@ def _extract_gtfs(zip_path: Path) -> None:
 
 
 def search_stations(query: str) -> list[dict]:
-    """Search for metro stations by name."""
-    query_lower = query.lower().strip()
+    """Search for metro stations by name with smart matching.
+
+    Handles accents (joao → João), abbreviations (D. → Dom),
+    and roman numerals (2 → II).
+    """
+    from bot.utils.search import fuzzy_search
+
+    query = query.strip()
+    if not query:
+        return []
+
+    station_names = list(STATIONS.keys())
+    matches = fuzzy_search(query, station_names, min_score=15, max_results=15)
+
     results = []
-
-    for name, data in STATIONS.items():
-        if query_lower in name.lower():
-            lines_info = []
-            for line_code in data["lines"]:
-                line_data = METRO_LINES.get(line_code, {})
-                lines_info.append({
-                    "code": line_code,
-                    "name": line_data.get("name", f"Linha {line_code}"),
-                    "emoji": line_data.get("emoji", "🚇"),
-                })
-            results.append({
-                "name": name,
-                "zone": data["zone"],
-                "lines": lines_info,
+    for name, score in matches:
+        data = STATIONS[name]
+        lines_info = []
+        for line_code in data["lines"]:
+            line_data = METRO_LINES.get(line_code, {})
+            lines_info.append({
+                "code": line_code,
+                "name": line_data.get("name", f"Linha {line_code}"),
+                "emoji": line_data.get("emoji", "🚇"),
             })
+        results.append({
+            "name": name,
+            "zone": data["zone"],
+            "lines": lines_info,
+        })
 
-    # Sort: exact matches first, then by name length
-    results.sort(key=lambda x: (
-        0 if x["name"].lower() == query_lower else 1,
-        len(x["name"]),
-    ))
-    return results[:15]
+    return results
 
 
 def get_station_lines(station_name: str) -> list[dict]:
     """Get lines that serve a specific station."""
     data = STATIONS.get(station_name)
     if not data:
-        # Try fuzzy match
-        for name, sdata in STATIONS.items():
-            if station_name.lower() in name.lower():
-                data = sdata
-                station_name = name
-                break
+        # Try smart fuzzy match
+        from bot.utils.search import fuzzy_search
+        matches = fuzzy_search(station_name, list(STATIONS.keys()), min_score=40, max_results=1)
+        if matches:
+            station_name = matches[0][0]
+            data = STATIONS[station_name]
     if not data:
         return []
 
@@ -259,12 +265,11 @@ def get_next_departures(station_name: str, line_code: str | None = None,
 
     station_data = STATIONS.get(station_name)
     if not station_data:
-        # Fuzzy match
-        for name, sdata in STATIONS.items():
-            if station_name.lower() in name.lower():
-                station_data = sdata
-                station_name = name
-                break
+        from bot.utils.search import fuzzy_search
+        matches = fuzzy_search(station_name, list(STATIONS.keys()), min_score=40, max_results=1)
+        if matches:
+            station_name = matches[0][0]
+            station_data = STATIONS[station_name]
     if not station_data:
         return []
 
@@ -349,11 +354,10 @@ def get_station_coordinates(station_name: str) -> dict | None:
     """Get coordinates for a metro station. Returns {"lat": ..., "lon": ...} or None."""
     data = STATIONS.get(station_name)
     if not data:
-        # Fuzzy match
-        for name, sdata in STATIONS.items():
-            if station_name.lower() in name.lower():
-                data = sdata
-                break
+        from bot.utils.search import fuzzy_search
+        matches = fuzzy_search(station_name, list(STATIONS.keys()), min_score=40, max_results=1)
+        if matches:
+            data = STATIONS[matches[0][0]]
     if data and data.get("lat") and data.get("lon"):
         return {"lat": data["lat"], "lon": data["lon"]}
     # Fallback: check GTFS data
