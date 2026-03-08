@@ -247,6 +247,29 @@ TRANSLATIONS = {
         "kb_trains": "🚆 Comboios",
         "kb_search_train_station": "🔍 Pesquisar estação",
         "kb_train_lines": "🗺 Linhas",
+        # Tourist
+        "tourist_title": (
+            "🗺 *Guia Turístico do Porto*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Descobre como chegar aos principais pontos turísticos\\.\n"
+            "Escolhe uma categoria:"
+        ),
+        "tourist_category_title": "{emoji} *{title}*\n━━━━━━━━━━━━━━━━\n\nEscolhe um destino:",
+        "tourist_dest_title": "{emoji} *{name}*\n━━━━━━━━━━━━━━━━\n",
+        "tourist_best_transport": "🚇 *Melhor transporte:* Metro",
+        "tourist_best_transport_bus": "🚌 *Melhor transporte:* Autocarro",
+        "tourist_station": "📍 *Estação/Paragem:* {station}",
+        "tourist_line": "🔹 *Linha:* {line}",
+        "tourist_bus_alt": "🚌 *Alternativa autocarro:* {buses}",
+        "tourist_zone": "🎫 *Zona Andante:* {zone}",
+        "tourist_walk": "🚶 *A pé:* ~{min} min da estação",
+        "tourist_walk_zero": "🚶 *A pé:* Saída direta",
+        "tourist_tip": "💡 *Dica:* {tip}",
+        "tourist_no_destinations": "Sem destinos nesta categoria\\.",
+        "kb_tourist": "🗺 Guia Turístico",
+        "kb_tourist_back_menu": "🔙 Menu turístico",
+        "kb_tourist_show_map": "📍 Ver no mapa",
+        "kb_tourist_tickets": "🎫 Bilhetes",
         # No results
         "no_results": "🤔 Não encontrei resultados para *{query}*\\.\n\nTenta pesquisar por:\n• Nome de uma paragem STCP\n• Código de paragem \\(ex: BCM2\\)\n• Nome de estação de metro\n\nOu usa o menu abaixo:",
     },
@@ -494,6 +517,29 @@ TRANSLATIONS = {
         "kb_trains": "🚆 Trains",
         "kb_search_train_station": "🔍 Search station",
         "kb_train_lines": "🗺 Lines",
+        # Tourist
+        "tourist_title": (
+            "🗺 *Porto Tourist Guide*\n"
+            "━━━━━━━━━━━━━━━━\n\n"
+            "Discover how to reach Porto's main attractions\\.\n"
+            "Choose a category:"
+        ),
+        "tourist_category_title": "{emoji} *{title}*\n━━━━━━━━━━━━━━━━\n\nChoose a destination:",
+        "tourist_dest_title": "{emoji} *{name}*\n━━━━━━━━━━━━━━━━\n",
+        "tourist_best_transport": "🚇 *Best transport:* Metro",
+        "tourist_best_transport_bus": "🚌 *Best transport:* Bus",
+        "tourist_station": "📍 *Station/Stop:* {station}",
+        "tourist_line": "🔹 *Line:* {line}",
+        "tourist_bus_alt": "🚌 *Bus alternative:* {buses}",
+        "tourist_zone": "🎫 *Andante Zone:* {zone}",
+        "tourist_walk": "🚶 *Walk:* ~{min} min from station",
+        "tourist_walk_zero": "🚶 *Walk:* Direct exit",
+        "tourist_tip": "💡 *Tip:* {tip}",
+        "tourist_no_destinations": "No destinations in this category\\.",
+        "kb_tourist": "🗺 Tourist Guide",
+        "kb_tourist_back_menu": "🔙 Tourist menu",
+        "kb_tourist_show_map": "📍 Show on map",
+        "kb_tourist_tickets": "🎫 Tickets",
         # No results
         "no_results": "🤔 No results found for *{query}*\\.\n\nTry searching for:\n• An STCP bus stop name\n• A stop code \\(e\\.g\\. BCM2\\)\n• A metro station name\n\nOr use the menu below:",
     },

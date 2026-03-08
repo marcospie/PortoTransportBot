@@ -18,7 +18,10 @@ def main_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
             InlineKeyboardButton(t("kb_metrobus", lang), callback_data="menu:metrobus"),
         ],
         [InlineKeyboardButton(t("kb_trains", lang), callback_data="menu:trains")],
-        [InlineKeyboardButton(t("kb_plan_route", lang), callback_data="plan:route")],
+        [
+            InlineKeyboardButton(t("kb_plan_route", lang), callback_data="plan:route"),
+            InlineKeyboardButton(t("kb_tourist", lang), callback_data="tourist:menu"),
+        ],
         [
             InlineKeyboardButton(t("kb_favorites", lang), callback_data="menu:favorites"),
             InlineKeyboardButton(t("kb_settings", lang), callback_data="menu:settings"),
@@ -422,5 +425,67 @@ def alerts_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
             InlineKeyboardButton(t("kb_alert_engineering", lang), callback_data="alerts:filter:engineering"),
         ],
         [InlineKeyboardButton(t("kb_refresh", lang), callback_data="menu:alerts")],
+        [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
+    ])
+
+
+# --- Tourist Keyboards ---
+
+def tourist_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build the main tourist menu with category buttons."""
+    from bot.services.tourist import TOURIST_POIS
+
+    buttons = []
+    for key, cat in TOURIST_POIS.items():
+        emoji = cat["emoji"]
+        title = cat["title_pt"] if lang == "pt" else cat["title_en"]
+        buttons.append([
+            InlineKeyboardButton(f"{emoji} {title}", callback_data=f"tourist:cat:{key}")
+        ])
+    buttons.append([InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def tourist_category_keyboard(category: str, lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build keyboard showing destinations in a category."""
+    from bot.services.tourist import get_category
+
+    cat = get_category(category)
+    buttons = []
+    if cat:
+        for i, dest in enumerate(cat.get("destinations", [])):
+            name = dest["name_pt"] if lang == "pt" else dest["name_en"]
+            buttons.append([
+                InlineKeyboardButton(
+                    f"\U0001f4cd {name}",
+                    callback_data=f"tourist:dest:{category}:{i}",
+                )
+            ])
+    buttons.append([InlineKeyboardButton(t("kb_tourist_tickets", lang), callback_data="tourist:tickets")])
+    buttons.append([InlineKeyboardButton(t("kb_tourist_back_menu", lang), callback_data="tourist:menu")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def tourist_destination_keyboard(category: str, dest_index: int,
+                                  station: str | None = None,
+                                  lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build keyboard for a specific destination (map, back)."""
+    buttons = []
+    if station:
+        cb_data = f"metro:station:{station}"
+        if len(cb_data.encode("utf-8")) <= 64:
+            buttons.append([
+                InlineKeyboardButton(t("kb_tourist_show_map", lang), callback_data=cb_data)
+            ])
+    buttons.append([InlineKeyboardButton(t("kb_tourist_tickets", lang), callback_data="tourist:tickets")])
+    buttons.append([InlineKeyboardButton(t("kb_tourist_back_menu", lang), callback_data=f"tourist:cat:{category}")])
+    buttons.append([InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def tourist_tickets_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
+    """Build keyboard for ticket info page."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("kb_tourist_back_menu", lang), callback_data="tourist:menu")],
         [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
     ])

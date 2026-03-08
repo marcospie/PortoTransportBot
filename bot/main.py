@@ -14,7 +14,7 @@ from telegram.ext import (
 
 from bot.config import TELEGRAM_BOT_TOKEN
 from bot.database import init_db, close_db
-from bot.handlers import alerts, bus, favorites, inline, location, metro, metrobus, routes, settings, start, trains
+from bot.handlers import alerts, bus, favorites, inline, location, metro, metrobus, routes, settings, start, tourist, trains
 from bot.services.metro import download_gtfs
 from bot.services.stcp import download_stcp_gtfs
 from bot.utils.i18n import get_lang, t
@@ -165,6 +165,7 @@ async def post_init(application: Application) -> None:
         BotCommand("metrobus", "MetroBus BRT"),
         BotCommand("comboios", "Comboios CP"),
         BotCommand("estacao", "Estacao CP"),
+        BotCommand("tourist", "Guia turístico"),
         BotCommand("alertas", "Alertas de serviço"),
         BotCommand("help", "Ajuda"),
     ]
@@ -181,6 +182,7 @@ async def post_init(application: Application) -> None:
         BotCommand("metrobus", "MetroBus BRT"),
         BotCommand("comboios", "CP Trains"),
         BotCommand("estacao", "CP Station"),
+        BotCommand("tourist", "Tourist guide"),
         BotCommand("alertas", "Service alerts"),
         BotCommand("help", "Help"),
     ]
@@ -283,6 +285,7 @@ def main() -> None:
     app.add_handler(CommandHandler("route", routes.route_command))
     app.add_handler(CommandHandler("settings", settings.settings_command))
     app.add_handler(CommandHandler("alertas", alerts.alertas_command))
+    app.add_handler(CommandHandler("tourist", tourist.tourist_command))
     app.add_handler(CommandHandler("metrobus", metrobus.metrobus_command))
     app.add_handler(CommandHandler("comboios", trains.trains_command))
     app.add_handler(CommandHandler("estacao", trains.estacao_command))
@@ -333,6 +336,12 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(trains.train_station_callback, pattern=r"^train:station:.+$"))
     app.add_handler(CallbackQueryHandler(trains.train_station_lines_callback, pattern=r"^train:station_lines:.+$"))
     app.add_handler(CallbackQueryHandler(trains.train_location_callback, pattern=r"^train:loc:.+$"))
+
+    # Tourist callbacks
+    app.add_handler(CallbackQueryHandler(tourist.tourist_menu_callback, pattern=r"^tourist:menu$"))
+    app.add_handler(CallbackQueryHandler(tourist.tourist_category_callback, pattern=r"^tourist:cat:.+$"))
+    app.add_handler(CallbackQueryHandler(tourist.tourist_destination_callback, pattern=r"^tourist:dest:.+$"))
+    app.add_handler(CallbackQueryHandler(tourist.tourist_tickets_callback, pattern=r"^tourist:tickets$"))
 
     # Alerts callbacks
     app.add_handler(CallbackQueryHandler(alerts.alerts_menu_callback, pattern=r"^menu:alerts$"))
