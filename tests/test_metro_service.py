@@ -14,6 +14,11 @@ from bot.services.metro import (
     STATIONS,
     METRO_LINES,
 )
+from bot.services.metro_realtime import (
+    _STATION_STOP_IDS,
+    _parse_stoptimes,
+    get_stop_id,
+)
 
 
 class TestSearchStations:
@@ -173,3 +178,112 @@ class TestStationsData:
     def test_all_stations_have_zone(self):
         for name, data in STATIONS.items():
             assert "zone" in data, f"Station {name} missing zone"
+
+
+class TestStopIdMapping:
+    """Verify every station has a MOTIS stop ID mapping."""
+
+    def test_all_stations_have_stop_id(self):
+        missing = []
+        for name in STATIONS:
+            if name not in _STATION_STOP_IDS:
+                missing.append(name)
+        assert not missing, (
+            f"Stations missing MOTIS stop ID: {missing}"
+        )
+
+    def test_all_stop_ids_are_valid_format(self):
+        for name, stop_id in _STATION_STOP_IDS.items():
+            assert stop_id.startswith("pt-Metro-Porto_"), (
+                f"Invalid stop ID format for {name}: {stop_id}"
+            )
+
+    def test_no_duplicate_stop_ids(self):
+        ids = list(_STATION_STOP_IDS.values())
+        assert len(ids) == len(set(ids)), "Duplicate stop IDs found"
+
+    def test_get_stop_id_helper(self):
+        assert get_stop_id("Trindade") == "pt-Metro-Porto_5726"
+        assert get_stop_id("Nonexistent") is None
+
+
+class TestParseStoptimes:
+    """Test parsing of MOTIS stoptimes response."""
+
+    @staticmethod
+    def _future_time(minutes_ahead=5):
+        """Return an ISO timestamp N minutes in the future."""
+        from datetime import timezone, timedelta
+        dt = datetime.now(timezone.utc) + timedelta(minutes=minutes_ahead)
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def test_parse_basic_stoptimes(self):
+        t1 = self._future_time(5)
+        t2 = self._future_time(10)
+        mock_data = [
+            {
+                "place": {
+                    "name": "Vasco da Gama",
+                    "stopId": "pt-Metro-Porto_5727",
+                    "departure": t1,
+                    "arrival": t1,
+                },
+                "mode": "SUBWAY",
+                "realTime": False,
+                "headsign": "Senhor de Matosinhos",
+                "agencyName": "Metro do Porto",
+                "routeShortName": "A",
+                "routeColor": "199fda",
+            },
+            {
+                "place": {
+                    "name": "Vasco da Gama",
+                    "stopId": "pt-Metro-Porto_5727",
+                    "departure": t2,
+                    "arrival": t2,
+                },
+                "mode": "SUBWAY",
+                "realTime": False,
+                "headsign": "Estádio do Dragão",
+                "agencyName": "Metro do Porto",
+                "routeShortName": "A",
+                "routeColor": "199fda",
+            },
+        ]
+        deps = _parse_stoptimes(mock_data)
+        assert len(deps) == 2
+        directions = {d["direction"] for d in deps}
+        assert "Senhor de Matosinhos" in directions
+        assert "Estádio do Dragão" in directions
+        for d in deps:
+            assert d["line_code"] == "A"
+            assert d["realtime"] is True
+            assert d["estimated"] is False
+
+    def test_filters_non_metro(self):
+        t = self._future_time(5)
+        mock_data = [
+            {
+                "place": {"departure": t},
+                "mode": "BUS",
+                "headsign": "Some Bus",
+                "agencyName": "STCP",
+                "routeShortName": "500",
+            },
+        ]
+        deps = _parse_stoptimes(mock_data)
+        assert len(deps) == 0
+
+    def test_deduplicates(self):
+        t = self._future_time(5)
+        entry = {
+            "place": {
+                "departure": t,
+            },
+            "mode": "SUBWAY",
+            "headsign": "Senhor de Matosinhos",
+            "agencyName": "Metro do Porto",
+            "routeShortName": "A",
+        }
+        deps = _parse_stoptimes([entry, entry])
+        assert len(deps) == 1

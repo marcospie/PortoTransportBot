@@ -1488,22 +1488,24 @@ class TestRealtimeDepartures:
     @pytest.mark.asyncio
     async def test_get_realtime_departures_with_mock(self):
         from bot.services.metro_realtime import get_realtime_departures, _cache
+        from datetime import timezone, timedelta
 
         _cache.clear()
 
-        mock_itinerary = {
-            "legs": [{
-                "mode": "SUBWAY",
-                "agencyName": "Metro do Porto",
-                "from": {"departure": "2026-03-09T10:05:00+00:00"},
-                "headsign": "Senhor de Matosinhos",
-                "routeShortName": "A",
-                "routeColor": "0088CC",
-            }],
-        }
+        now = datetime.now(timezone.utc)
+        t1 = (now + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        with patch("bot.services.metro_realtime._query_motis",
-                    new_callable=AsyncMock, return_value=[mock_itinerary]):
+        mock_stoptimes = [{
+            "place": {"departure": t1},
+            "mode": "SUBWAY",
+            "agencyName": "Metro do Porto",
+            "headsign": "Senhor de Matosinhos",
+            "routeShortName": "A",
+            "routeColor": "0088CC",
+        }]
+
+        with patch("bot.services.metro_realtime._query_stoptimes",
+                    new_callable=AsyncMock, return_value=mock_stoptimes):
             deps = await get_realtime_departures("Trindade", count=5)
 
         assert isinstance(deps, list)
@@ -1519,34 +1521,35 @@ class TestRealtimeDepartures:
     async def test_realtime_departures_balance(self):
         """Verify that realtime departures are balanced across directions."""
         from bot.services.metro_realtime import get_realtime_departures, _cache
+        from datetime import timezone, timedelta
 
         _cache.clear()
 
-        # Simulate itineraries with multiple departures in each direction
-        all_itins = []
+        now = datetime.now(timezone.utc)
+
+        # Simulate stoptimes with multiple departures in each direction
+        mock_stoptimes = []
         for i in range(0, 30, 3):
-            all_itins.append({
-                "legs": [{
-                    "mode": "SUBWAY",
-                    "agencyName": "Metro do Porto",
-                    "from": {"departure": f"2026-03-09T10:{i:02d}:00+00:00"},
-                    "headsign": "Hosp. São João",
-                    "routeShortName": "D",
-                }],
+            t = (now + timedelta(minutes=i + 1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            mock_stoptimes.append({
+                "place": {"departure": t},
+                "mode": "SUBWAY",
+                "agencyName": "Metro do Porto",
+                "headsign": "Hospital São João",
+                "routeShortName": "D",
             })
         for i in range(1, 30, 6):
-            all_itins.append({
-                "legs": [{
-                    "mode": "SUBWAY",
-                    "agencyName": "Metro do Porto",
-                    "from": {"departure": f"2026-03-09T10:{i:02d}:00+00:00"},
-                    "headsign": "Hospital Santos Silva",
-                    "routeShortName": "D",
-                }],
+            t = (now + timedelta(minutes=i + 1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            mock_stoptimes.append({
+                "place": {"departure": t},
+                "mode": "SUBWAY",
+                "agencyName": "Metro do Porto",
+                "headsign": "Hospital Santos Silva",
+                "routeShortName": "D",
             })
 
-        with patch("bot.services.metro_realtime._query_motis",
-                    new_callable=AsyncMock, return_value=all_itins):
+        with patch("bot.services.metro_realtime._query_stoptimes",
+                    new_callable=AsyncMock, return_value=mock_stoptimes):
             deps = await get_realtime_departures("D. João II", count=8)
 
         if deps:

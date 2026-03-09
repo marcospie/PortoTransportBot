@@ -1,20 +1,17 @@
-"""Metro do Porto departures via the MOTIS open transit routing API.
+"""Metro do Porto departures via the MOTIS stoptimes API.
 
 MOTIS (https://europe.motis-project.de) is an open-source multi-modal transit
 router that ingests GTFS data from transit agencies across Europe, including
-Metro do Porto.  By querying transit routes from a station to its neighbours
-we can extract the next departure times, lines, and directions.
+Metro do Porto.  The /api/v1/stoptimes endpoint returns all upcoming departures
+from a given stop — including line, headsign (direction), and scheduled times —
+in a single request.
 
-This replaces the previous Playwright-based scraper which rendered the
-metrodoporto.pt trip planner in a headless browser (slow, fragile, blocked
-by proxy environments).
-
-The MOTIS API returns schedule-based data from the Metro do Porto GTFS feed.
-Responses are fast (~500ms for parallel queries) and include line codes,
-headsigns (directions), colours, and agency info.
+This replaces the previous approach of querying the /plan endpoint with
+neighbour stations, which often missed directions and required multiple
+parallel requests.  The stoptimes endpoint is simpler, faster, and returns
+both directions for every line serving a station.
 """
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -27,10 +24,106 @@ logger = logging.getLogger(__name__)
 
 _cache = TTLCache(default_ttl=90)  # 90-second cache
 
-# MOTIS European transit routing API
-_MOTIS_URL = "https://europe.motis-project.de/api/v1/plan"
+# MOTIS European transit API — stoptimes endpoint returns all departures at a stop
+_MOTIS_STOPTIMES_URL = "https://europe.motis-project.de/api/v1/stoptimes"
 
-# Line code to internal bot code mapping (MOTIS returns short route names)
+# Mapping from station name (as used in our STATIONS dict) to MOTIS stop ID.
+# These were discovered by querying the MOTIS /plan endpoint for each line
+# and extracting stopId from itinerary legs and intermediate stops.
+_STATION_STOP_IDS: dict[str, str] = {
+    # Line A — Senhor de Matosinhos ↔ Estádio do Dragão
+    "Senhor de Matosinhos": "pt-Metro-Porto_5723",
+    "Mercado": "pt-Metro-Porto_5716",
+    "Brito Capelo": "pt-Metro-Porto_5700",
+    "Matosinhos Sul": "pt-Metro-Porto_5715",
+    "Câmara de Matosinhos": "pt-Metro-Porto_5701",
+    "Parque de Real": "pt-Metro-Porto_5719",
+    "Pedro Hispano": "pt-Metro-Porto_5720",
+    "Vasco da Gama": "pt-Metro-Porto_5727",
+    "Estádio do Mar": "pt-Metro-Porto_5709",
+    # Shared trunk — Senhora da Hora ↔ Campanhã/Estádio do Dragão
+    "Senhora da Hora": "pt-Metro-Porto_5724",
+    "Sete Bicas": "pt-Metro-Porto_5725",
+    "Viso": "pt-Metro-Porto_5729",
+    "Ramalde": "pt-Metro-Porto_5721",
+    "Francos": "pt-Metro-Porto_5711",
+    "Casa da Música": "pt-Metro-Porto_5706",
+    "Carolina Michaelis": "pt-Metro-Porto_5704",
+    "Lapa": "pt-Metro-Porto_5713",
+    "Trindade": "pt-Metro-Porto_5726",
+    "Bolhão": "pt-Metro-Porto_5699",
+    "Campo 24 de Agosto": "pt-Metro-Porto_5697",
+    "Heroísmo": "pt-Metro-Porto_5712",
+    "Campanhã": "pt-Metro-Porto_5703",
+    "Estádio do Dragão": "pt-Metro-Porto_5708",
+    # Line C / F — east of Campanhã
+    "Nasoni": "pt-Metro-Porto_5717",
+    "Nau Vitória": "pt-Metro-Porto_5718",
+    "Contumil": "pt-Metro-Porto_5707",
+    "Levada": "pt-Metro-Porto_5714",
+    "Rio Tinto": "pt-Metro-Porto_5722",
+    "Campainha": "pt-Metro-Porto_5702",
+    "Baguim": "pt-Metro-Porto_5698",
+    "Fânzeres": "pt-Metro-Porto_5710",
+    "Venda Nova": "pt-Metro-Porto_5728",
+    "Carreira": "pt-Metro-Porto_5705",
+    # Line C — Maia / ISMAI
+    "Custió": "pt-Metro-Porto_5757",
+    "Araújo": "pt-Metro-Porto_5754",
+    "Cândido dos Reis": "pt-Metro-Porto_5755",
+    "Pias": "pt-Metro-Porto_5764",
+    "Fórum da Maia": "pt-Metro-Porto_5760",
+    "Parque da Maia": "pt-Metro-Porto_5763",
+    "Mandim": "pt-Metro-Porto_5762",
+    "Zona Industrial": "pt-Metro-Porto_5765",
+    "Castêlo da Maia": "pt-Metro-Porto_5756",
+    "ISMAI": "pt-Metro-Porto_5761",
+    # Line D — Hospital de São João ↔ Hospital Santos Silva
+    "Hospital de São João": "pt-Metro-Porto_5791",
+    "IPO": "pt-Metro-Porto_5772",
+    "Polo Universitário": "pt-Metro-Porto_5776",
+    "Salgueiros": "pt-Metro-Porto_5777",
+    "Combatentes": "pt-Metro-Porto_5768",
+    "Marquês": "pt-Metro-Porto_5775",
+    "Faria Guimarães": "pt-Metro-Porto_5770",
+    "Aliados": "pt-Metro-Porto_5766",
+    "São Bento": "pt-Metro-Porto_5778",
+    "Jardim do Morro": "pt-Metro-Porto_5773",
+    "General Torres": "pt-Metro-Porto_5771",
+    "Câmara de Gaia": "pt-Metro-Porto_5767",
+    "João de Deus": "pt-Metro-Porto_5774",
+    "Santo Ovídio": "pt-Metro-Porto_5792",
+    "D. João II": "pt-Metro-Porto_5769",
+    "Manuel Leão": "pt-Metro-Porto_5812",
+    "Vila d'Este": "pt-Metro-Porto_5813",
+    "Hospital Santos Silva": "pt-Metro-Porto_5811",
+    # Line B — Póvoa de Varzim
+    "Custóias": "pt-Metro-Porto_5734",
+    "Crestins": "pt-Metro-Porto_5733",
+    "Esposade": "pt-Metro-Porto_5736",
+    "Vilar do Pinheiro": "pt-Metro-Porto_5753",
+    "Modivas Sul": "pt-Metro-Porto_5743",
+    "Modivas Centro": "pt-Metro-Porto_5741",
+    "Mindelo": "pt-Metro-Porto_5740",
+    "Varziela": "pt-Metro-Porto_5749",
+    "Árvore": "pt-Metro-Porto_5731",
+    "Azurara": "pt-Metro-Porto_5732",
+    "Vila do Conde": "pt-Metro-Porto_5752",
+    "Santa Clara": "pt-Metro-Porto_5747",
+    "Portas Fronhas": "pt-Metro-Porto_5745",
+    "Alto de Pega": "pt-Metro-Porto_5730",
+    "São Brás": "pt-Metro-Porto_5748",
+    "Póvoa de Varzim": "pt-Metro-Porto_5746",
+    # Line E — Aeroporto
+    "Aeroporto": "pt-Metro-Porto_5782",
+    "Pedras Rubras": "pt-Metro-Porto_5744",
+    "Verdes": "pt-Metro-Porto_5750",
+    "Lidador": "pt-Metro-Porto_5739",
+    "Botica": "pt-Metro-Porto_5783",
+    "Fonte do Cuco": "pt-Metro-Porto_5737",
+}
+
+# Line code to internal bot code mapping
 _ROUTE_TO_LINE = {
     "A": "A",
     "B": "B",
@@ -41,137 +134,116 @@ _ROUTE_TO_LINE = {
 }
 
 
-async def _query_motis(origin_lat: float, origin_lon: float,
-                       dest_lat: float, dest_lon: float,
-                       num_itineraries: int = 5) -> list[dict]:
-    """Query MOTIS for transit itineraries between two points."""
+def get_stop_id(station_name: str) -> Optional[str]:
+    """Get the MOTIS stop ID for a station name."""
+    return _STATION_STOP_IDS.get(station_name)
+
+
+async def _query_stoptimes(stop_id: str, count: int = 20) -> list[dict]:
+    """Query MOTIS stoptimes endpoint for all departures at a stop."""
     now = datetime.now(timezone.utc)
-    time_str = now.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    time_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     params = {
-        "fromPlace": f"{origin_lat},{origin_lon}",
-        "toPlace": f"{dest_lat},{dest_lon}",
+        "stopId": stop_id,
         "time": time_str,
-        "mode": "TRANSIT",
-        "numItineraries": str(num_itineraries),
+        "n": str(count),
+        "arriveBy": "false",
     }
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(_MOTIS_URL, params=params)
+            resp = await client.get(_MOTIS_STOPTIMES_URL, params=params)
             if resp.status_code != 200:
-                logger.warning("MOTIS API returned HTTP %d", resp.status_code)
+                logger.warning("MOTIS stoptimes API returned HTTP %d", resp.status_code)
                 return []
-            return resp.json().get("itineraries", [])
+            return resp.json().get("stopTimes", [])
     except Exception:
-        logger.debug("MOTIS API request failed", exc_info=True)
+        logger.debug("MOTIS stoptimes request failed", exc_info=True)
         return []
 
 
-def _get_neighbour_stations(station_name: str) -> list[str]:
-    """Get neighbouring stations in opposite directions."""
-    from bot.services.metro import STATIONS, get_line_stations
-
-    station_data = STATIONS.get(station_name)
-    if not station_data:
-        return []
-
-    neighbours = set()
-    for line_code in station_data["lines"]:
-        line_stations = get_line_stations(line_code)
-        if station_name not in line_stations:
-            continue
-        idx = line_stations.index(station_name)
-        if idx > 0:
-            neighbours.add(line_stations[idx - 1])
-        if idx < len(line_stations) - 1:
-            neighbours.add(line_stations[idx + 1])
-
-    return list(neighbours)[:4]
-
-
-def _extract_departures(itineraries: list[dict],
-                        station_name: str) -> list[dict]:
-    """Extract metro departures from MOTIS itineraries."""
+def _parse_stoptimes(stop_times: list[dict]) -> list[dict]:
+    """Parse MOTIS stoptimes response into departure dicts."""
     from bot.config import METRO_LINES
 
     now = datetime.now(timezone.utc)
     departures = []
-    seen = set()  # (time, direction) to deduplicate
+    seen = set()
 
-    for itin in itineraries:
-        for leg in itin.get("legs", []):
-            if leg.get("mode") not in ("SUBWAY", "TRAM", "RAIL"):
-                continue
-            if leg.get("agencyName", "").lower() not in (
-                "metro do porto", "metro", ""
-            ):
-                continue
+    for st in stop_times:
+        mode = st.get("mode", "")
+        if mode not in ("SUBWAY", "TRAM", "RAIL"):
+            continue
 
-            dep_str = leg.get("from", {}).get("departure", "")
-            if not dep_str:
-                continue
+        agency = st.get("agencyName", "").lower()
+        if agency and agency not in ("metro do porto", "metro"):
+            continue
 
-            headsign = leg.get("headsign", "")
-            route_short = leg.get("routeShortName", "")
+        place = st.get("place", {})
+        dep_str = place.get("departure", "")
+        if not dep_str:
+            continue
 
-            # Deduplicate by time + direction
-            dedup_key = (dep_str, headsign)
-            if dedup_key in seen:
-                continue
-            seen.add(dedup_key)
+        headsign = st.get("headsign", "")
+        route_short = st.get("routeShortName", "")
 
-            # Parse departure time
-            try:
-                dep_dt = datetime.fromisoformat(dep_str)
-                if dep_dt.tzinfo is None:
-                    dep_dt = dep_dt.replace(tzinfo=timezone.utc)
-                minutes_until = (dep_dt - now).total_seconds() / 60
-            except (ValueError, TypeError):
-                continue
+        # Deduplicate by time + direction
+        dedup_key = (dep_str, headsign)
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
 
-            if minutes_until < -1:
-                continue
+        # Parse departure time
+        try:
+            dep_dt = datetime.fromisoformat(dep_str.replace("Z", "+00:00"))
+            if dep_dt.tzinfo is None:
+                dep_dt = dep_dt.replace(tzinfo=timezone.utc)
+            minutes_until = (dep_dt - now).total_seconds() / 60
+        except (ValueError, TypeError):
+            continue
 
-            # Format time display
-            if minutes_until < 1:
-                time_display = "< 1 min"
-            elif minutes_until < 60:
-                time_display = f"{int(minutes_until)} min"
-            else:
-                time_display = dep_dt.strftime("%H:%M")
+        if minutes_until < -1:
+            continue
 
-            # Map route to line
-            line_code = _ROUTE_TO_LINE.get(route_short, "")
-            line_data = METRO_LINES.get(line_code, {})
-            if line_data:
-                line_display = f"{line_data['emoji']} {line_data['name']}"
-            else:
-                line_display = f"🚇 Linha {route_short}" if route_short else "🚇 Metro"
+        # Format time display
+        if minutes_until < 1:
+            time_display = "< 1 min"
+        elif minutes_until < 60:
+            time_display = f"{int(minutes_until)} min"
+        else:
+            time_display = dep_dt.strftime("%H:%M")
 
-            departures.append({
-                "direction": headsign,
-                "time": time_display,
-                "line": line_display,
-                "line_code": line_code,
-                "minutes": max(0, int(minutes_until)),
-                "estimated": False,
-                "realtime": True,
-                "route_color": leg.get("routeColor", ""),
-            })
+        # Map route to line
+        line_code = _ROUTE_TO_LINE.get(route_short, "")
+        line_data = METRO_LINES.get(line_code, {})
+        if line_data:
+            line_display = f"{line_data['emoji']} {line_data['name']}"
+        else:
+            line_display = f"🚇 Linha {route_short}" if route_short else "🚇 Metro"
 
-    # Sort by departure time
+        departures.append({
+            "direction": headsign,
+            "time": time_display,
+            "line": line_display,
+            "line_code": line_code,
+            "minutes": max(0, int(minutes_until)),
+            "estimated": False,
+            "realtime": True,
+            "route_color": st.get("routeColor", ""),
+        })
+
     departures.sort(key=lambda x: x.get("minutes", 999))
     return departures
 
 
 async def get_realtime_departures(station_name: str,
                                    count: int = 8) -> list[dict]:
-    """Get next departures for a metro station via MOTIS API.
+    """Get next departures for a metro station via MOTIS stoptimes API.
 
-    Queries routes from the station to its neighbours in opposite
-    directions.  Each response includes the departure time at the
-    origin station, the line, and the headsign (direction).
+    Queries the stoptimes endpoint directly with the station's stop ID,
+    which returns all upcoming departures including every line and direction.
+    No need for neighbour queries or direction balancing hacks.
 
     Returns a list of departure dicts compatible with
     ``metro.get_next_departures()``.
@@ -181,42 +253,16 @@ async def get_realtime_departures(station_name: str,
     if cached is not None:
         return cached
 
-    from bot.services.metro import STATIONS
-
-    station_data = STATIONS.get(station_name)
-    if not station_data:
+    stop_id = _STATION_STOP_IDS.get(station_name)
+    if not stop_id:
+        logger.warning("No MOTIS stop ID for station: %s", station_name)
         return []
 
-    origin_lat = station_data.get("lat")
-    origin_lon = station_data.get("lon")
-    if not origin_lat or not origin_lon:
+    stop_times = await _query_stoptimes(stop_id, count=count * 3)
+    if not stop_times:
         return []
 
-    # Get neighbours to query in opposite directions
-    neighbours = _get_neighbour_stations(station_name)
-    if not neighbours:
-        return []
-
-    # Query MOTIS for routes to each neighbour in parallel
-    tasks = []
-    for neighbour in neighbours:
-        ndata = STATIONS.get(neighbour, {})
-        nlat, nlon = ndata.get("lat"), ndata.get("lon")
-        if nlat and nlon:
-            tasks.append(_query_motis(origin_lat, origin_lon, nlat, nlon, 5))
-
-    if not tasks:
-        return []
-
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Merge all itineraries
-    all_itineraries = []
-    for result in results:
-        if isinstance(result, list):
-            all_itineraries.extend(result)
-
-    departures = _extract_departures(all_itineraries, station_name)
+    departures = _parse_stoptimes(stop_times)
 
     # Balance directions so both are represented, then limit
     from bot.services.metro import _balance_directions
