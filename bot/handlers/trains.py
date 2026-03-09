@@ -56,6 +56,7 @@ async def trains_menu_callback(update: Update,
     await query.answer()
     lang = get_lang(update)
     _clear_awaiting(context)
+    context.user_data.pop("train_back", None)
     await query.edit_message_text(
         t("trains_title", lang),
         parse_mode="MarkdownV2",
