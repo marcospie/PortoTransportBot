@@ -370,11 +370,14 @@ async def get_next_departures_async(station_name: str,
     """Get next departures, trying real-time data first.
 
     Priority: real-time (trip planner) > GTFS schedule > frequency estimate.
+    If real-time data only covers one direction, supplement with estimated
+    departures for the missing direction(s) so users always see both.
     """
     try:
         from bot.services.metro_realtime import get_realtime_departures
         rt = await get_realtime_departures(station_name, count=count)
         if rt:
+            rt = _supplement_missing_directions(station_name, rt, line_code, count)
             return rt
     except Exception:
         logger.debug("Real-time data unavailable, falling back to schedule",
@@ -588,6 +591,96 @@ def _balance_directions(departures: list[dict], count: int) -> list[dict]:
     # Re-sort by departure time so display is chronological
     result.sort(key=lambda x: x.get("minutes", 999))
     return result
+
+
+def _supplement_missing_directions(station_name: str, rt_deps: list[dict],
+                                    line_code: str | None,
+                                    count: int) -> list[dict]:
+    """Add estimated departures for directions missing from realtime data.
+
+    When the MOTIS API only returns departures in one direction (e.g. only
+    "Senhor de Matosinhos" at Vasco da Gama), this adds frequency-based
+    estimates for the other direction so users always see both.
+    """
+    station_data = STATIONS.get(station_name)
+    if not station_data:
+        return rt_deps
+
+    # Collect all expected directions from line endpoints
+    expected_dirs: set[str] = set()
+    lines_to_check = [line_code] if line_code else station_data["lines"]
+    for lc in lines_to_check:
+        line_data = METRO_LINES.get(lc, {})
+        route = line_data.get("route", "")
+        if " ↔ " in route:
+            for endpoint in route.split(" ↔ "):
+                expected_dirs.add(endpoint)
+
+    if not expected_dirs:
+        return rt_deps
+
+    # Check which directions are present in realtime data
+    rt_directions = set(d.get("direction", "") for d in rt_deps)
+
+    # Find missing directions (match by substring to handle headsign variants)
+    missing = set()
+    for expected in expected_dirs:
+        found = False
+        for rt_dir in rt_directions:
+            if expected.lower() in rt_dir.lower() or rt_dir.lower() in expected.lower():
+                found = True
+                break
+        if not found:
+            missing.add(expected)
+
+    if not missing:
+        return rt_deps
+
+    # Generate estimated departures for missing directions
+    now = datetime.now()
+    if not _is_operating(now.time()):
+        return rt_deps
+
+    freq_type = _get_frequency_type(now)
+    frequencies = FREQUENCIES[freq_type]
+
+    supplemental = []
+    for lc in lines_to_check:
+        line_data = METRO_LINES.get(lc, {})
+        route = line_data.get("route", "")
+        if " ↔ " not in route:
+            continue
+        endpoints = route.split(" ↔ ")
+
+        for direction in endpoints:
+            if direction not in missing:
+                continue
+
+            freq_minutes = frequencies.get(lc, 15)
+            minutes_since_hour = now.minute + now.second / 60
+            next_in = freq_minutes - (minutes_since_hour % freq_minutes)
+            if next_in < 1:
+                next_in += freq_minutes
+
+            # Add a few estimated departures for the missing direction
+            slots = max(2, count // 2)
+            for i in range(slots):
+                dep_minutes = int(next_in + i * freq_minutes)
+                dep_time = now + timedelta(minutes=dep_minutes)
+                supplemental.append({
+                    "direction": direction,
+                    "time": f"~{dep_time.strftime('%H:%M')}",
+                    "line": f"{line_data['emoji']} {line_data['name']}",
+                    "line_code": lc,
+                    "estimated": True,
+                    "minutes": dep_minutes,
+                })
+
+    if not supplemental:
+        return rt_deps
+
+    combined = rt_deps + supplemental
+    return _balance_directions(combined, count)
 
 
 def _get_gtfs_departures(station_name: str, line_code: str | None,

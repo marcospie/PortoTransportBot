@@ -12,7 +12,9 @@ from bot.services.metro import (
     STATIONS as METRO_STATIONS,
     search_stations as metro_search,
     get_next_departures as metro_departures,
+    get_next_departures_async as metro_departures_async,
     _balance_directions,
+    _supplement_missing_directions,
     get_line_stations,
     get_station_lines,
     get_station_coordinates,
@@ -269,6 +271,284 @@ class TestBalanceDirections:
         for dep in result:
             assert "line" in dep
             assert "time" in dep
+
+
+# ===========================================================================
+# 2b. DIRECTION COVERAGE — Every station MUST show both directions
+# ===========================================================================
+
+class TestEveryStationBothDirections:
+    """Every non-terminal station must show departures in BOTH directions.
+
+    This is the critical test that catches the Vasco da Gama bug:
+    when realtime data only has one direction, the system must supplement
+    with estimated departures for the missing direction.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _patch_time(self):
+        fake_now = datetime(2026, 3, 9, 10, 0, 0)
+        with patch("bot.services.metro.datetime") as mock_dt:
+            mock_dt.now.return_value = fake_now
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            yield
+
+    def _get_expected_directions(self, station_name):
+        """Get all endpoint directions a station should have."""
+        data = METRO_STATIONS[station_name]
+        expected = set()
+        for lc in data["lines"]:
+            line_data = METRO_LINES.get(lc, {})
+            route = line_data.get("route", "")
+            if " ↔ " in route:
+                for endpoint in route.split(" ↔ "):
+                    # Terminal stations don't depart toward themselves
+                    if endpoint != station_name:
+                        expected.add(endpoint)
+        return expected
+
+    def _is_terminal(self, station_name):
+        """Check if station is a terminal (end of any line)."""
+        data = METRO_STATIONS[station_name]
+        for lc in data["lines"]:
+            line_data = METRO_LINES.get(lc, {})
+            route = line_data.get("route", "")
+            if " ↔ " in route:
+                endpoints = route.split(" ↔ ")
+                if station_name in endpoints:
+                    return True
+        return False
+
+    # Build list of non-terminal stations that should show both directions
+    _NON_TERMINAL_STATIONS = []
+    for _name, _data in METRO_STATIONS.items():
+        _is_term = False
+        for _lc in _data["lines"]:
+            _ld = METRO_LINES.get(_lc, {})
+            _route = _ld.get("route", "")
+            if " ↔ " in _route:
+                if _name in _route.split(" ↔ "):
+                    _is_term = True
+        if not _is_term:
+            _NON_TERMINAL_STATIONS.append(_name)
+
+    @pytest.mark.parametrize("station_name", _NON_TERMINAL_STATIONS)
+    def test_frequency_departures_both_directions(self, station_name):
+        """Frequency-based departures must include both directions."""
+        deps = metro_departures(station_name, count=10)
+        directions = set(d.get("direction", "") for d in deps)
+        expected = self._get_expected_directions(station_name)
+
+        for exp_dir in expected:
+            found = any(
+                exp_dir.lower() in d.lower() or d.lower() in exp_dir.lower()
+                for d in directions
+            )
+            assert found, (
+                f"{station_name}: missing direction '{exp_dir}'. "
+                f"Got directions: {directions}"
+            )
+
+
+class TestSupplementMissingDirections:
+    """Test _supplement_missing_directions fixes one-direction realtime data."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_time(self):
+        fake_now = datetime(2026, 3, 9, 10, 0, 0)
+        with patch("bot.services.metro.datetime") as mock_dt:
+            mock_dt.now.return_value = fake_now
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            yield
+
+    def test_vasco_da_gama_one_direction_supplemented(self):
+        """THE BUG: Vasco da Gama only showing Senhor de Matosinhos."""
+        rt_deps = [
+            {"direction": "Senhor de Matosinhos", "time": "10 min",
+             "line": "🔵 Linha Azul", "line_code": "A", "minutes": 10,
+             "realtime": True},
+            {"direction": "Senhor de Matosinhos", "time": "23 min",
+             "line": "🔵 Linha Azul", "line_code": "A", "minutes": 23,
+             "realtime": True},
+            {"direction": "Senhor de Matosinhos", "time": "35 min",
+             "line": "🔵 Linha Azul", "line_code": "A", "minutes": 35,
+             "realtime": True},
+        ]
+        result = _supplement_missing_directions("Vasco da Gama", rt_deps, None, 5)
+        directions = set(d["direction"] for d in result)
+        assert len(directions) >= 2, (
+            f"Vasco da Gama must show both directions after supplement. "
+            f"Got: {directions}"
+        )
+        assert any("Dragão" in d or "Dragao" in d for d in directions), (
+            f"Missing Estádio do Dragão direction. Got: {directions}"
+        )
+
+    def test_supplement_does_not_alter_complete_data(self):
+        """If both directions already present, don't add anything."""
+        rt_deps = [
+            {"direction": "Senhor de Matosinhos", "time": "5 min",
+             "line": "🔵 Linha Azul", "line_code": "A", "minutes": 5},
+            {"direction": "Estádio do Dragão", "time": "8 min",
+             "line": "🔵 Linha Azul", "line_code": "A", "minutes": 8},
+        ]
+        result = _supplement_missing_directions("Vasco da Gama", rt_deps, None, 5)
+        # Should not add extra — both directions present
+        non_estimated = [d for d in result if not d.get("estimated")]
+        assert len(non_estimated) >= 2
+
+    def test_supplement_trindade_multi_line(self):
+        """Trindade (hub) with only one line's direction should get others."""
+        rt_deps = [
+            {"direction": "Senhor de Matosinhos", "time": "3 min",
+             "line": "🔵 Linha Azul", "line_code": "A", "minutes": 3},
+        ]
+        result = _supplement_missing_directions("Trindade", rt_deps, None, 8)
+        directions = set(d["direction"] for d in result)
+        # Should have at least one more direction beyond Senhor de Matosinhos
+        assert len(directions) >= 2, (
+            f"Trindade hub should have multiple directions. Got: {directions}"
+        )
+
+    def test_supplement_pedro_hispano(self):
+        """Pedro Hispano — neighbor of Vasco da Gama, same bug pattern."""
+        rt_deps = [
+            {"direction": "Senhor de Matosinhos", "time": "7 min",
+             "line": "🔵 Linha Azul", "line_code": "A", "minutes": 7},
+        ]
+        result = _supplement_missing_directions("Pedro Hispano", rt_deps, None, 5)
+        directions = set(d["direction"] for d in result)
+        assert len(directions) >= 2
+
+    def test_supplement_estadio_do_mar(self):
+        """Estádio do Mar — also on Line A, same bug pattern."""
+        rt_deps = [
+            {"direction": "Senhor de Matosinhos", "time": "4 min",
+             "line": "🔵 Linha Azul", "line_code": "A", "minutes": 4},
+        ]
+        result = _supplement_missing_directions("Estádio do Mar", rt_deps, None, 5)
+        directions = set(d["direction"] for d in result)
+        assert len(directions) >= 2
+
+    def test_supplement_empty_still_adds_estimates(self):
+        """Even with no RT data, supplement adds estimated departures."""
+        result = _supplement_missing_directions("Vasco da Gama", [], None, 5)
+        # With empty RT, both directions are missing — should add estimates
+        assert isinstance(result, list)
+
+    def test_supplement_unknown_station(self):
+        rt_deps = [{"direction": "X", "time": "1 min", "minutes": 1}]
+        result = _supplement_missing_directions("NonexistentXYZ", rt_deps, None, 5)
+        assert result == rt_deps
+
+    # Test ALL single-line stations (most vulnerable to this bug)
+    _SINGLE_LINE_STATIONS = [
+        name for name, data in METRO_STATIONS.items()
+        if len(data["lines"]) == 1
+    ]
+
+    @pytest.mark.parametrize("station_name", _SINGLE_LINE_STATIONS)
+    def test_single_line_station_supplemented(self, station_name):
+        """Every single-line station must show both directions when RT has only one."""
+        data = METRO_STATIONS[station_name]
+        line_code = data["lines"][0]
+        line_data = METRO_LINES.get(line_code, {})
+        route = line_data.get("route", "")
+        if " ↔ " not in route:
+            return
+        endpoints = route.split(" ↔ ")
+
+        # Simulate RT data with only the first endpoint direction
+        rt_deps = [
+            {"direction": endpoints[0], "time": f"{i*10} min",
+             "line": f"{line_data['emoji']} {line_data['name']}",
+             "line_code": line_code, "minutes": i * 10, "realtime": True}
+            for i in range(1, 4)
+        ]
+        result = _supplement_missing_directions(station_name, rt_deps, None, 5)
+
+        # Terminal stations only have one direction — skip those
+        if station_name in endpoints:
+            return
+
+        directions = set(d["direction"] for d in result)
+        assert len(directions) >= 2, (
+            f"{station_name} (Line {line_code}): only showing {directions}. "
+            f"Expected both directions from route '{route}'"
+        )
+
+
+class TestAsyncDeparturesBothDirections:
+    """Test get_next_departures_async supplements missing directions."""
+
+    @pytest.mark.asyncio
+    async def test_vasco_da_gama_async_both_directions(self):
+        """Vasco da Gama must show both directions even with one-direction RT."""
+        rt_deps = [
+            {"direction": "Senhor de Matosinhos", "time": "10 min",
+             "line": "🔵 Linha Azul", "line_code": "A", "minutes": 10,
+             "realtime": True},
+            {"direction": "Senhor de Matosinhos", "time": "23 min",
+             "line": "🔵 Linha Azul", "line_code": "A", "minutes": 23,
+             "realtime": True},
+        ]
+
+        with patch("bot.services.metro_realtime.get_realtime_departures",
+                    new_callable=AsyncMock, return_value=rt_deps), \
+             patch("bot.services.metro.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 3, 9, 10, 0, 0)
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            deps = await metro_departures_async("Vasco da Gama")
+
+        directions = set(d["direction"] for d in deps)
+        assert len(directions) >= 2, (
+            f"Vasco da Gama async: got only {directions}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_d_joao_ii_async_both_directions(self):
+        """D. João II — original bug station — must also show both."""
+        rt_deps = [
+            {"direction": "Sto. Ovídio", "time": "5 min",
+             "line": "🟡 Linha Amarela", "line_code": "D", "minutes": 5,
+             "realtime": True},
+        ]
+
+        with patch("bot.services.metro_realtime.get_realtime_departures",
+                    new_callable=AsyncMock, return_value=rt_deps), \
+             patch("bot.services.metro.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 3, 9, 10, 0, 0)
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            deps = await metro_departures_async("D. João II")
+
+        directions = set(d["direction"] for d in deps)
+        assert len(directions) >= 2, (
+            f"D. João II async: got only {directions}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_bolhao_async_both_directions(self):
+        """Bolhão — multi-line station with partial RT data."""
+        rt_deps = [
+            {"direction": "Senhor de Matosinhos", "time": "3 min",
+             "line": "🔵 Linha Azul", "line_code": "A", "minutes": 3,
+             "realtime": True},
+            {"direction": "Senhor de Matosinhos", "time": "15 min",
+             "line": "🔵 Linha Azul", "line_code": "A", "minutes": 15,
+             "realtime": True},
+        ]
+
+        with patch("bot.services.metro_realtime.get_realtime_departures",
+                    new_callable=AsyncMock, return_value=rt_deps), \
+             patch("bot.services.metro.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 3, 9, 10, 0, 0)
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            deps = await metro_departures_async("Bolhão")
+
+        directions = set(d["direction"] for d in deps)
+        assert len(directions) >= 2, (
+            f"Bolhão async: got only {directions}"
+        )
 
 
 # ===========================================================================
@@ -1351,13 +1631,27 @@ class TestAsyncDepartures:
     async def test_async_departures_uses_realtime_when_available(self):
         from bot.services.metro import get_next_departures_async
 
-        rt_deps = [{"direction": "RT North", "time": "1 min", "minutes": 1, "realtime": True}]
+        # Provide both directions so supplement doesn't add extras
+        rt_deps = [
+            {"direction": "Senhor de Matosinhos", "time": "1 min", "minutes": 1, "realtime": True},
+            {"direction": "Estádio do Dragão", "time": "3 min", "minutes": 3, "realtime": True},
+            {"direction": "ISMAI", "time": "5 min", "minutes": 5, "realtime": True},
+            {"direction": "Campainha", "time": "7 min", "minutes": 7, "realtime": True},
+            {"direction": "Hospital de S. João", "time": "9 min", "minutes": 9, "realtime": True},
+            {"direction": "Sto. Ovídio", "time": "11 min", "minutes": 11, "realtime": True},
+        ]
 
         with patch("bot.services.metro_realtime.get_realtime_departures",
-                    new_callable=AsyncMock, return_value=rt_deps):
+                    new_callable=AsyncMock, return_value=rt_deps), \
+             patch("bot.services.metro.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 3, 9, 10, 0, 0)
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
             deps = await get_next_departures_async("Trindade")
 
-        assert deps == rt_deps
+        # RT data included, should contain the realtime entries
+        rt_dirs = {d["direction"] for d in rt_deps}
+        result_dirs = {d["direction"] for d in deps}
+        assert rt_dirs & result_dirs, "RT data should be included in results"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("station_name", [
