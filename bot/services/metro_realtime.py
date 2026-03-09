@@ -218,8 +218,9 @@ async def get_realtime_departures(station_name: str,
 
     departures = _extract_departures(all_itineraries, station_name)
 
-    # Limit to requested count
-    departures = departures[:count]
+    # Balance directions so both are represented, then limit
+    from bot.services.metro import _balance_directions
+    departures = _balance_directions(departures, count)
 
     if departures:
         _cache.set(cache_key, departures)

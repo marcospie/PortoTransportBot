@@ -552,6 +552,44 @@ def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+def _balance_directions(departures: list[dict], count: int) -> list[dict]:
+    """Ensure departures include both directions when available.
+
+    Groups departures by direction and interleaves them so that the final
+    list contains a balanced mix rather than all departures from whichever
+    direction happens to depart first.
+    """
+    if len(departures) <= count:
+        return departures
+
+    # Group by direction
+    by_dir: dict[str, list[dict]] = {}
+    for dep in departures:
+        d = dep.get("direction", "")
+        by_dir.setdefault(d, []).append(dep)
+
+    if len(by_dir) <= 1:
+        return departures[:count]
+
+    # Interleave: round-robin across directions, each sorted by time
+    dirs = list(by_dir.values())
+    result = []
+    idx = 0
+    while len(result) < count:
+        added = False
+        for group in dirs:
+            if idx < len(group) and len(result) < count:
+                result.append(group[idx])
+                added = True
+        if not added:
+            break
+        idx += 1
+
+    # Re-sort by departure time so display is chronological
+    result.sort(key=lambda x: x.get("minutes", 999))
+    return result
+
+
 def _get_gtfs_departures(station_name: str, line_code: str | None,
                           count: int, now: datetime) -> list[dict]:
     """Get next departures from GTFS data with day filtering and directions."""
@@ -647,7 +685,7 @@ def _get_gtfs_departures(station_name: str, line_code: str | None,
             seen.add(key)
             unique.append(dep)
 
-    return unique[:count]
+    return _balance_directions(unique, count)
 
 
 def _is_operating(current_time: time) -> bool:
