@@ -234,11 +234,17 @@ async def train_station_callback(update: Update,
             )
 
         back_cb = context.user_data.get("train_back", "menu:trains")
-        await query.edit_message_text(
-            text,
-            parse_mode="MarkdownV2",
-            reply_markup=train_station_actions_keyboard(station_name, is_fav=is_fav, lang=lang, back_callback=back_cb),
-        )
+        try:
+            await query.edit_message_text(
+                text,
+                parse_mode="MarkdownV2",
+                reply_markup=train_station_actions_keyboard(station_name, is_fav=is_fav, lang=lang, back_callback=back_cb),
+            )
+        except Exception as edit_err:
+            if "Message is not modified" in str(edit_err):
+                pass
+            else:
+                raise
     except Exception:
         logger.exception("Error in train_station_callback for %s", station_name)
         await query.edit_message_text(

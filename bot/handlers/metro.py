@@ -263,14 +263,20 @@ async def metro_station_callback(update: Update,
         text = _build_station_text(station_name, departures, lang)
 
         back_cb = context.user_data.get("metro_back", "menu:metro")
-        await query.edit_message_text(
-            text,
-            parse_mode="MarkdownV2",
-            reply_markup=metro_station_actions_keyboard(
-                station_name, is_fav=is_fav, lang=lang,
-                back_callback=back_cb,
-            ),
-        )
+        try:
+            await query.edit_message_text(
+                text,
+                parse_mode="MarkdownV2",
+                reply_markup=metro_station_actions_keyboard(
+                    station_name, is_fav=is_fav, lang=lang,
+                    back_callback=back_cb,
+                ),
+            )
+        except Exception as edit_err:
+            if "Message is not modified" in str(edit_err):
+                pass  # Content unchanged, ignore
+            else:
+                raise
 
         # Onboarding tip for first-time users
         if not context.user_data.get("onboarded"):

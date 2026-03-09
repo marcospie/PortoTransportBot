@@ -227,11 +227,17 @@ async def metrobus_stop_callback(update: Update,
             text = t("metrobus_closed", lang)
 
         back_cb = context.user_data.get("metrobus_back", "menu:metrobus")
-        await query.edit_message_text(
-            text,
-            parse_mode="MarkdownV2",
-            reply_markup=metrobus_stop_actions_keyboard(stop_name, is_fav=is_fav, lang=lang, back_callback=back_cb),
-        )
+        try:
+            await query.edit_message_text(
+                text,
+                parse_mode="MarkdownV2",
+                reply_markup=metrobus_stop_actions_keyboard(stop_name, is_fav=is_fav, lang=lang, back_callback=back_cb),
+            )
+        except Exception as edit_err:
+            if "Message is not modified" in str(edit_err):
+                pass
+            else:
+                raise
     except Exception:
         logger.exception("Error in metrobus_stop_callback for %s", stop_name)
         await query.edit_message_text(
