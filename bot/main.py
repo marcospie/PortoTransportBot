@@ -54,6 +54,23 @@ async def unknown_callback(update: Update, context) -> None:
 async def handle_text(update: Update, context) -> None:
     """Route free-text messages to the appropriate handler."""
     text = update.message.text.strip()
+
+    # Strip leading @BotMention (user may type @BotName query in chat)
+    if text.startswith("@") and " " in text:
+        mention, rest = text.split(" ", 1)
+        bot_me = context.bot.username or ""
+        if mention.lower() == f"@{bot_me.lower()}":
+            text = rest.strip()
+
+    # Strip mode prefix (metro/bus/metrobus) so "metro trindade" → "trindade"
+    text_lower = text.lower()
+    if text_lower.startswith("metrobus "):
+        text = text[9:].strip()
+    elif text_lower.startswith("metro "):
+        text = text[6:].strip()
+    elif text_lower.startswith("bus "):
+        text = text[4:].strip()
+
     lang = get_lang(update)
 
     # Handle persistent reply keyboard buttons (match both PT and EN labels)
