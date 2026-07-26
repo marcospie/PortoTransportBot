@@ -50,6 +50,13 @@ _MOTIS_GEOCODE_URL = f"{_MOTIS_BASE}/geocode"
 # Only metro modes; see note 1 in the module docstring.
 _MOTIS_MODE = "SUBWAY"
 
+#: transitous asks API clients to identify themselves rather than send a
+#: default library agent (https://transitous.org/api/); its /plan endpoint
+#: already rejects generic agents with HTTP 403. Sent on every request so we
+#: stay on the right side of that policy and are identifiable in their logs.
+_MOTIS_USER_AGENT = "PortoTransportBot/1.0 (+https://github.com/porto-transport-bot)"
+_MOTIS_HEADERS = {"User-Agent": _MOTIS_USER_AGENT}
+
 # Discard departures further ahead than this; see note 3.
 _HORIZON_MINUTES = 180
 
@@ -228,7 +235,7 @@ async def _geocode_stop_id(station_name: str) -> Optional[str]:
 
     query = _GEOCODE_QUERY_ALIASES.get(station_name, station_name)
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, headers=_MOTIS_HEADERS) as client:
             resp = await client.get(_MOTIS_GEOCODE_URL, params={"text": query})
             if resp.status_code != 200:
                 logger.warning(
@@ -338,7 +345,7 @@ async def _query_stoptimes(stop_id: str, count: int = 20) -> list[dict]:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, headers=_MOTIS_HEADERS) as client:
             resp = await client.get(_MOTIS_STOPTIMES_URL, params=params)
             if resp.status_code != 200:
                 logger.warning("MOTIS stoptimes API returned HTTP %d for %s",

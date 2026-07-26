@@ -753,8 +753,8 @@ class TestMotisFallback:
     async def test_motis_results_are_preferred(self):
         import bot.services.trip_planner as tp
 
-        motis_option = TripOption(steps=[TripStep(mode="bus", from_name="A",
-                                                  to_name="B", line="204",
+        motis_option = TripOption(steps=[TripStep(mode="metro", from_name="A",
+                                                  to_name="B", line="Linha Azul",
                                                   duration_min=5)],
                                   total_time_min=5, estimated=False,
                                   source=tp.SOURCE_MOTIS)
@@ -785,3 +785,61 @@ class TestMotisFallback:
                           new_callable=AsyncMock) as resolver:
             resolver.return_value = None
             assert await tp.plan_trip_async("xyzzy", "Trindade") == []
+
+
+class TestMetroGapIsCovered:
+    """transitous MOTIS returns no Metro do Porto legs from /plan (verified live)."""
+
+    @pytest.mark.asyncio
+    async def test_metro_estimates_merged_when_motis_has_no_metro(self):
+        import bot.services.trip_planner as tp
+
+        bus_only = TripOption(
+            steps=[TripStep(mode="bus", from_name="A", to_name="B",
+                            line="201", duration_min=40)],
+            total_time_min=40, estimated=False, source=tp.SOURCE_MOTIS,
+        )
+        with patch.object(tp, "motis_plan", new_callable=AsyncMock) as motis:
+            motis.return_value = [bus_only]
+            # Senhora da Hora -> Trindade: an obvious metro trip.
+            options = await tp.plan_trip_from_coords_async(
+                41.1802, -8.6480, 41.1519, -8.6102)
+
+        assert bus_only in options
+        metro_options = [o for o in options
+                         if any(s.mode == "metro" for s in o.steps)]
+        assert metro_options, "the metro must not vanish from a Porto trip plan"
+        assert all(o.estimated for o in metro_options)
+
+    @pytest.mark.asyncio
+    async def test_real_itinerary_wins_ties_against_estimates(self):
+        import bot.services.trip_planner as tp
+
+        real = TripOption(
+            steps=[TripStep(mode="bus", from_name="A", to_name="B",
+                            line="201", duration_min=5)],
+            total_time_min=1, estimated=False, source=tp.SOURCE_MOTIS,
+        )
+        with patch.object(tp, "motis_plan", new_callable=AsyncMock) as motis:
+            motis.return_value = [real]
+            options = await tp.plan_trip_from_coords_async(
+                41.1802, -8.6480, 41.1519, -8.6102)
+
+        assert options[0] is real
+
+    @pytest.mark.asyncio
+    async def test_no_merge_when_motis_already_has_metro(self):
+        import bot.services.trip_planner as tp
+
+        with_metro = TripOption(
+            steps=[TripStep(mode="metro", from_name="A", to_name="B",
+                            line="A", duration_min=10)],
+            total_time_min=10, estimated=False, source=tp.SOURCE_MOTIS,
+        )
+        with patch.object(tp, "motis_plan", new_callable=AsyncMock) as motis:
+            motis.return_value = [with_metro]
+            options = await tp.plan_trip_from_coords_async(
+                41.1802, -8.6480, 41.1519, -8.6102)
+
+        assert options == [with_metro]
+        assert not any(o.estimated for o in options)

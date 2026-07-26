@@ -24,6 +24,7 @@ import statistics
 import zipfile
 from datetime import datetime, time, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import aiohttp
 import aiofiles
@@ -38,6 +39,16 @@ from bot.config import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: Departure clock times are Porto wall-clock times. Deployment hosts run in
+#: UTC, so datetime.now() would render every estimate an hour behind local
+#: time in summer -- times the user reads as already past.
+PORTO_TZ = ZoneInfo("Europe/Lisbon")
+
+
+def _porto_now() -> datetime:
+    """Current Porto wall-clock time, naive for arithmetic with time()."""
+    return datetime.now(PORTO_TZ).replace(tzinfo=None)
 
 # GTFS stop names differ slightly from the names this bot shows users (and that
 # users search for). Map feed name -> bot name so GTFS-derived data can be
@@ -870,7 +881,7 @@ def get_next_departures(station_name: str, line_code: str | None = None,
     if not station_data:
         return []
 
-    now = datetime.now()
+    now = _porto_now()
     current_time = now.time()
 
     # Check if metro is operating
@@ -1122,7 +1133,7 @@ def _supplement_missing_directions(station_name: str, rt_deps: list[dict],
         return rt_deps
 
     # Generate estimated departures for missing directions
-    now = datetime.now()
+    now = _porto_now()
     if not _is_operating(now.time()):
         return rt_deps
 

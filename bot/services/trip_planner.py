@@ -1229,6 +1229,10 @@ async def motis_plan(origin_lat: float, origin_lon: float,
     return options
 
 
+def _has_metro_leg(options: list[TripOption]) -> bool:
+    return any(step.mode == "metro" for option in options for step in option.steps)
+
+
 async def plan_trip_from_coords_async(
     origin_lat: float, origin_lon: float,
     dest_lat: float, dest_lon: float,
@@ -1236,18 +1240,39 @@ async def plan_trip_from_coords_async(
 ) -> list[TripOption]:
     """Plan a trip using real timetables, falling back to the offline estimator.
 
-    MOTIS covers STCP buses, Metro do Porto and CP trains together, with real
-    departure times, waiting times and transfers.  When it is unreachable the
-    haversine estimator takes over and its options carry ``estimated=True``.
+    MOTIS covers STCP buses and CP trains with real departure times, waiting
+    times and transfers.  When it is unreachable, the haversine estimator takes
+    over and every option it produces carries ``estimated=True``.
+
+    One caveat, verified against the live endpoint: the transitous MOTIS graph
+    currently returns **no Metro do Porto legs** from ``/plan`` (its metro feed
+    is visible through ``/stoptimes`` but is not routable — asking for
+    ``transitModes=SUBWAY`` yields zero itineraries).  Dropping the metro
+    entirely from a Porto transport bot would be worse than showing an estimate,
+    so when MOTIS produces no metro option we merge in the estimator's metro
+    options, each still flagged as an estimate.
     """
     options = await motis_plan(origin_lat, origin_lon, dest_lat, dest_lon, when=when)
-    if options:
-        return options[:5]
 
-    if options == []:
-        logger.info("MOTIS found no itinerary; trying the offline estimator")
+    if not options:
+        if options == []:
+            logger.info("MOTIS found no itinerary; using the offline estimator")
+        return plan_trip_from_coords(origin_lat, origin_lon, dest_lat, dest_lon)
 
-    return plan_trip_from_coords(origin_lat, origin_lon, dest_lat, dest_lon)
+    if not _has_metro_leg(options):
+        try:
+            estimates = plan_trip_from_coords(origin_lat, origin_lon,
+                                              dest_lat, dest_lon)
+        except Exception:
+            logger.exception("Could not build metro estimates")
+            estimates = []
+        metro_estimates = [o for o in estimates
+                           if any(s.mode == "metro" for s in o.steps)][:2]
+        options = options + metro_estimates
+
+    # Real itineraries win ties against estimates.
+    options.sort(key=lambda o: (o.total_time_min, o.estimated, o.transfers))
+    return options[:5]
 
 
 async def plan_trip_async(origin_text: str, dest_text: str) -> list[TripOption]:
