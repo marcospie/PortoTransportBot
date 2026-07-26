@@ -594,3 +594,69 @@ class TestStartReplyKeyboard:
         # The train line must not be labelled with the metro emoji.
         train_line = next(l for l in body.splitlines() if "Campanha" in l)
         assert "🚇" not in train_line
+
+
+class TestDetailViewFallbacks:
+    """The detail view must survive even when its text cannot be recovered."""
+
+    @pytest.mark.asyncio
+    async def test_unrecoverable_text_swaps_only_the_keyboard(self):
+        update, query = _detail_update("remove", "metro", is_fav=True)
+        # No MarkdownV2 rendering available (e.g. a caption-only message).
+        query.message.text_markdown_v2 = None
+        query.message.text_markdown_v2_urled = None
+        ctx = _context()
+
+        with patch.object(fav_mod, "remove_favorite", new=AsyncMock()), \
+             patch.object(fav_mod, "get_favorites",
+                          new=AsyncMock(return_value=[])) as mock_get:
+            await fav_mod.remove_favorite_callback(update, ctx)
+
+        query.edit_message_reply_markup.assert_awaited_once()
+        query.edit_message_text.assert_not_awaited()
+        mock_get.assert_not_awaited()
+        data = _callbacks(
+            query.edit_message_reply_markup.await_args.kwargs["reply_markup"])
+        assert "fav:add:metro:Trindade" in data
+
+    @pytest.mark.asyncio
+    async def test_never_reflows_unescaped_text_as_markdown(self):
+        """Only pre-escaped MarkdownV2 may be re-sent."""
+        update, query = _detail_update("remove", "train", is_fav=True)
+        query.message.text_markdown_v2 = None
+        query.message.text_markdown_v2_urled = None
+        query.message.text = "Porto-Campanha (CP) — 3 min"  # unescaped
+        ctx = _context()
+
+        with patch.object(fav_mod, "remove_favorite", new=AsyncMock()), \
+             patch.object(fav_mod, "get_favorites", new=AsyncMock(return_value=[])):
+            await fav_mod.remove_favorite_callback(update, ctx)
+
+        query.edit_message_text.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_edit_failure_falls_back_to_the_list(self):
+        update, query = _detail_update("remove", "metro", is_fav=True)
+        query.edit_message_text = AsyncMock(side_effect=[Exception("boom"), None])
+        ctx = _context()
+
+        with patch.object(fav_mod, "remove_favorite", new=AsyncMock()), \
+             patch.object(fav_mod, "get_favorites",
+                          new=AsyncMock(return_value=[])) as mock_get:
+            await fav_mod.remove_favorite_callback(update, ctx)
+
+        mock_get.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_unchanged_message_is_not_an_error(self):
+        """safe_edit_message swallows Telegram's "not modified"."""
+        update, query = _detail_update("add", "metro", is_fav=False)
+        query.edit_message_text = AsyncMock(
+            side_effect=Exception("Message is not modified"))
+        ctx = _context()
+
+        with patch.object(fav_mod, "is_favorite", new=AsyncMock(return_value=False)), \
+             patch.object(fav_mod, "add_favorite", new=AsyncMock()):
+            await fav_mod.add_favorite_callback(update, ctx)
+
+        query.answer.assert_awaited_once()

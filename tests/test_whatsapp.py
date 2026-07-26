@@ -431,6 +431,18 @@ class TestVerificationHandshake:
         })
         assert resp.status_code == 403
 
+    def test_no_parameters_is_forbidden(self, client):
+        assert client.get("/webhook").status_code == 403
+
+    def test_non_ascii_verify_token_does_not_error(self, client):
+        """compare_digest raises TypeError on non-ASCII str - must not 500."""
+        resp = client.get("/webhook", query_string={
+            "hub.mode": "subscribe",
+            "hub.verify_token": "tökén-ünicode",
+            "hub.challenge": "12345",
+        })
+        assert resp.status_code == 403
+
 
 # ===========================================================================
 # 2. Button id audit - every id sent must have a handler

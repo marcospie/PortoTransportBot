@@ -290,130 +290,223 @@ TOURIST_POIS = {
 }
 
 
-# Ticket / Andante zone information
+# ---------------------------------------------------------------------------
+# Ticket / Andante information
+#
+# Built at import time from bot.services.fares so that this guide and the zone
+# calculator can never quote different prices for the same ticket.  Strings are
+# pre-escaped for Telegram MarkdownV2 because handlers/tourist.py inserts them
+# verbatim.
+# ---------------------------------------------------------------------------
+
+
+def _esc(text: str) -> str:
+    """Escape text for Telegram MarkdownV2."""
+    from bot.utils.formatting import escape_md
+    return escape_md(text)
+
+
+def _money(value: float | None) -> str:
+    """A price, MarkdownV2-escaped, or a clear 'not published' marker."""
+    if value is None:
+        return _esc("n/d")
+    return _esc(f"{value:.2f}\u20ac")
+
+
+def _occasional_lines(lang: str) -> str:
+    """One bullet per priced occasional title, straight from the fare table."""
+    zones_word = "zonas" if lang == "pt" else "zones"
+    out = []
+    for n in sorted(fares.OCCASIONAL_PRICES):
+        out.append(
+            f"\u2022 *{_esc(f'Z{n}')}* \\({n} {zones_word}\\): "
+            f"{_money(fares.OCCASIONAL_PRICES[n])} "
+            f"\u2014 {_esc(fares.MAX_TRIP_DURATION[n])}"
+        )
+    return "\n".join(out)
+
+
+def _day_pass_lines() -> str:
+    out = []
+    for n in sorted(fares.DAY_PASS_PRICES):
+        out.append(f"\u2022 *{_esc(f'Z{n}')}*: {_money(fares.DAY_PASS_PRICES[n])}")
+    return "\n".join(out)
+
+
+def _build_ticket_info(lang: str) -> dict:
+    tour1 = _money(fares.get_tour_price(1))
+    tour3 = _money(fares.get_tour_price(3))
+    blue = _money(fares.CARD_PRICE_BLUE)
+    silver = _money(fares.CARD_PRICE_SILVER)
+    airport_title = _title_from_porto_centre("Aeroporto")
+    airport_price = _money(fares.get_price(fares.title_zones(4)))
+    monthly_3z = _money(fares.get_monthly_price("3Z"))
+    monthly_metro = _money(fares.get_monthly_price("metropolitano"))
+    labels = fares.MONTHLY_LABELS.get(lang, fares.MONTHLY_LABELS["pt"])
+    max_priced = fares.MAX_PRICED_ZONES
+    verified = _esc(fares.verified_note(lang))
+
+    if lang == "en":
+        return {
+            "title": "\U0001f3ab *Tickets \\& Andante Card*",
+            "sections": [
+                {
+                    "heading": "\U0001f4b3 Andante Card",
+                    "text": (
+                        "Andante is the card used on the metro, STCP buses, CP "
+                        "urban trains and the MetroBus\\.\n"
+                        f"\u2022 Andante Azul \\(occasional\\): {blue}\n"
+                        f"\u2022 Andante Prateado \\(monthly passes\\): {silver}"
+                    ),
+                },
+                {
+                    "heading": "\U0001f5fa How zones work",
+                    "text": (
+                        "Andante zones are *not* numbered rings\\. They have real "
+                        "names such as *PRT1* \\(central Porto\\), *VNG1* "
+                        "\\(Gaia riverside\\) or *VCD8* \\(the airport\\), and they "
+                        "are printed at every station\\.\n\n"
+                        "*Z2*, *Z3*, *Z4*\\.\\.\\. are *ticket* names: the number of "
+                        "zones the ticket covers, counted outwards from where "
+                        "you validate\\. Every ticket covers at least 2 zones, "
+                        "so a trip inside one zone still needs a *Z2*\\."
+                    ),
+                },
+                {
+                    "heading": "\U0001f4b0 Single tickets",
+                    "text": (
+                        _occasional_lines("en")
+                        + "\n\nBuy 10 and get 1 free\\.\n"
+                        + _esc(f"Titles above Z{max_priced} exist but their price "
+                               "is not published online — check at a machine.")
+                    ),
+                },
+                {
+                    "heading": "\U0001f4c5 Andante 24 \\(24h\\)",
+                    "text": _day_pass_lines(),
+                },
+                {
+                    "heading": "\U0001f9f3 Andante Tour \\(tourists\\)",
+                    "text": (
+                        f"\u2022 *Tour 1* — 24h, all zones: {tour1}\n"
+                        f"\u2022 *Tour 3* — 72h, all zones: {tour3}\n"
+                        + _esc("Not valid on the Guindais funicular or the STCP tram.")
+                    ),
+                },
+                {
+                    "heading": "\U0001f4c6 Monthly passes",
+                    "text": (
+                        f"\u2022 *{_esc(labels['3Z'])}*: {monthly_3z}\n"
+                        f"\u2022 *{_esc(labels['metropolitano'])}*: {monthly_metro}"
+                    ),
+                },
+                {
+                    "heading": "\U0001f3ea Where to buy",
+                    "text": (
+                        "\u2022 Ticket machines at every metro station\n"
+                        "\u2022 Andante shops \\(Trindade, Casa da M\u00fasica\\)\n"
+                        "\u2022 CP ticket offices and Payshop agents\n"
+                        "\u2022 Airport: machines at the metro entrance"
+                    ),
+                },
+                {
+                    "heading": "\u2708\ufe0f Airport ticket",
+                    "text": (
+                        f"The airport is in zone *VCD8*\\. From central Porto that "
+                        f"is a *{_esc(airport_title)}* ticket: *{airport_price}* "
+                        f"\\+ {blue} for the card if you do not have one\\."
+                    ),
+                },
+                {
+                    "heading": "\u2705 Price check",
+                    "text": f"_{verified}_",
+                },
+            ],
+        }
+
+    return {
+        "title": "\U0001f3ab *Bilhetes e Cart\u00e3o Andante*",
+        "sections": [
+            {
+                "heading": "\U0001f4b3 Cart\u00e3o Andante",
+                "text": (
+                    "O Andante \u00e9 o cart\u00e3o usado no metro, autocarros STCP, "
+                    "comboios urbanos da CP e MetroBus\\.\n"
+                    f"\u2022 Andante Azul \\(ocasional\\): {blue}\n"
+                    f"\u2022 Andante Prateado \\(passes\\): {silver}"
+                ),
+            },
+            {
+                "heading": "\U0001f5fa Como funcionam as zonas",
+                "text": (
+                    "As zonas Andante *n\u00e3o* s\u00e3o an\u00e9is numerados\\. T\u00eam nomes "
+                    "reais como *PRT1* \\(centro do Porto\\), *VNG1* \\(cais de "
+                    "Gaia\\) ou *VCD8* \\(aeroporto\\), e est\u00e3o afixados em "
+                    "todas as esta\u00e7\u00f5es\\.\n\n"
+                    "*Z2*, *Z3*, *Z4*\\.\\.\\. s\u00e3o nomes de *t\u00edtulo*: o n\u00famero de "
+                    "zonas que o t\u00edtulo cobre, contadas a partir de onde "
+                    "validas\\. Todos os t\u00edtulos cobrem no m\u00ednimo 2 zonas, "
+                    "por isso uma viagem dentro de uma s\u00f3 zona j\u00e1 precisa de "
+                    "um *Z2*\\."
+                ),
+            },
+            {
+                "heading": "\U0001f4b0 T\u00edtulos ocasionais",
+                "text": (
+                    _occasional_lines("pt")
+                    + "\n\nNa compra de 10 t\u00edtulos recebes 1 gr\u00e1tis\\.\n"
+                    + _esc(f"Existem t\u00edtulos acima de Z{max_priced}, mas o pre\u00e7o "
+                           "n\u00e3o \u00e9 publicado online — confirma na m\u00e1quina.")
+                ),
+            },
+            {
+                "heading": "\U0001f4c5 Andante 24 \\(24h\\)",
+                "text": _day_pass_lines(),
+            },
+            {
+                "heading": "\U0001f9f3 Andante Tour \\(turistas\\)",
+                "text": (
+                    f"\u2022 *Tour 1* — 24h, todas as zonas: {tour1}\n"
+                    f"\u2022 *Tour 3* — 72h, todas as zonas: {tour3}\n"
+                    + _esc("N\u00e3o \u00e9 v\u00e1lido no Funicular dos Guindais nem no "
+                           "El\u00e9trico da STCP.")
+                ),
+            },
+            {
+                "heading": "\U0001f4c6 Passes mensais",
+                "text": (
+                    f"\u2022 *{_esc(labels['3Z'])}*: {monthly_3z}\n"
+                    f"\u2022 *{_esc(labels['metropolitano'])}*: {monthly_metro}"
+                ),
+            },
+            {
+                "heading": "\U0001f3ea Onde comprar",
+                "text": (
+                    "\u2022 M\u00e1quinas autom\u00e1ticas em todas as esta\u00e7\u00f5es de metro\n"
+                    "\u2022 Lojas Andante \\(Trindade, Casa da M\u00fasica\\)\n"
+                    "\u2022 Bilheteiras da CP e agentes Payshop\n"
+                    "\u2022 Aeroporto: m\u00e1quinas na entrada do metro"
+                ),
+            },
+            {
+                "heading": "\u2708\ufe0f Bilhete do aeroporto",
+                "text": (
+                    f"O aeroporto est\u00e1 na zona *VCD8*\\. Do centro do Porto "
+                    f"precisas de um t\u00edtulo *{_esc(airport_title)}*: "
+                    f"*{airport_price}* \\+ {blue} do cart\u00e3o se n\u00e3o tiveres\\."
+                ),
+            },
+            {
+                "heading": "\u2705 Verifica\u00e7\u00e3o de pre\u00e7os",
+                "text": f"_{verified}_",
+            },
+        ],
+    }
+
+
 TICKET_INFO = {
-    "pt": {
-        "title": "🎫 *Bilhetes e Cartão Andante*",
-        "sections": [
-            {
-                "heading": "💳 Cartão Andante",
-                "text": (
-                    "O Andante é o cartão recarregável usado no metro, "
-                    "autocarros STCP e outros transportes do Porto\\.\n"
-                    "• Cartão: €0\\.60 \\(compra única\\)\n"
-                    "• Recarregável com títulos de viagem"
-                ),
-            },
-            {
-                "heading": "🗺 Sistema de Zonas",
-                "text": (
-                    "O Porto usa um sistema de zonas concêntricas:\n"
-                    "• *Z2* — Centro do Porto \\(a maioria dos pontos turísticos\\)\n"
-                    "• *Z3* — Subúrbios próximos \\(Gaia, Gondomar\\)\n"
-                    "• *Z4* — Matosinhos, Aeroporto\n"
-                    "• *Z5\\-Z10* — Zonas mais afastadas\n\n"
-                    "O preço depende do número de zonas que atravessas\\."
-                ),
-            },
-            {
-                "heading": "💰 Preços \\(título ocasional\\)",
-                "text": (
-                    "• Z2 \\(1 zona\\): €1\\.25\n"
-                    "• Z3 \\(2 zonas\\): €1\\.65\n"
-                    "• Z4 \\(3 zonas\\): €2\\.00\n"
-                    "• Z5 \\(4 zonas\\): €2\\.50\n\n"
-                    "Cada título é válido por 1 hora\\."
-                ),
-            },
-            {
-                "heading": "📅 Passe Diário",
-                "text": (
-                    "• *Andante 24*: viagens ilimitadas por 24h\n"
-                    "  Z2: €4\\.15 \\| Z3: €5\\.50 \\| Z4: €7\\.00\n"
-                    "• *Andante Tour 1*: 24h todas as zonas — €7\\.00\n"
-                    "• *Andante Tour 3*: 72h todas as zonas — €15\\.00"
-                ),
-            },
-            {
-                "heading": "🏪 Onde comprar",
-                "text": (
-                    "• Máquinas automáticas em todas as estações de metro\n"
-                    "• Lojas Andante \\(Trindade, Casa da Música\\)\n"
-                    "• Papelarias e quiosques com sinal Andante\n"
-                    "• Aeroporto: máquinas na estação de metro"
-                ),
-            },
-            {
-                "heading": "✈️ Bilhete Aeroporto",
-                "text": (
-                    "O aeroporto está na *Zona Z4*\\.\n"
-                    "Título Z4: *€2\\.00* \\+ cartão €0\\.60 se não tiveres\\.\n"
-                    "Compra na máquina automática à entrada do metro no aeroporto\\."
-                ),
-            },
-        ],
-    },
-    "en": {
-        "title": "🎫 *Tickets \\& Andante Card*",
-        "sections": [
-            {
-                "heading": "💳 Andante Card",
-                "text": (
-                    "The Andante is the rechargeable card used on metro, "
-                    "STCP buses and other Porto transport\\.\n"
-                    "• Card: €0\\.60 \\(one\\-time purchase\\)\n"
-                    "• Rechargeable with travel titles"
-                ),
-            },
-            {
-                "heading": "🗺 Zone System",
-                "text": (
-                    "Porto uses a concentric zone system:\n"
-                    "• *Z2* — Porto center \\(most tourist spots\\)\n"
-                    "• *Z3* — Near suburbs \\(Gaia, Gondomar\\)\n"
-                    "• *Z4* — Matosinhos, Airport\n"
-                    "• *Z5\\-Z10* — Further zones\n\n"
-                    "The price depends on how many zones you cross\\."
-                ),
-            },
-            {
-                "heading": "💰 Prices \\(single ticket\\)",
-                "text": (
-                    "• Z2 \\(1 zone\\): €1\\.25\n"
-                    "• Z3 \\(2 zones\\): €1\\.65\n"
-                    "• Z4 \\(3 zones\\): €2\\.00\n"
-                    "• Z5 \\(4 zones\\): €2\\.50\n\n"
-                    "Each title is valid for 1 hour\\."
-                ),
-            },
-            {
-                "heading": "📅 Day Pass",
-                "text": (
-                    "• *Andante 24*: unlimited travel for 24h\n"
-                    "  Z2: €4\\.15 \\| Z3: €5\\.50 \\| Z4: €7\\.00\n"
-                    "• *Andante Tour 1*: 24h all zones — €7\\.00\n"
-                    "• *Andante Tour 3*: 72h all zones — €15\\.00"
-                ),
-            },
-            {
-                "heading": "🏪 Where to buy",
-                "text": (
-                    "• Ticket machines at all metro stations\n"
-                    "• Andante shops \\(Trindade, Casa da Música\\)\n"
-                    "• Paper shops and kiosks with Andante sign\n"
-                    "• Airport: machines at metro station entrance"
-                ),
-            },
-            {
-                "heading": "✈️ Airport Ticket",
-                "text": (
-                    "The airport is in *Zone Z4*\\.\n"
-                    "Z4 title: *€2\\.00* \\+ card €0\\.60 if you don't have one\\.\n"
-                    "Buy at the ticket machine at the metro entrance in the airport\\."
-                ),
-            },
-        ],
-    },
+    "pt": _build_ticket_info("pt"),
+    "en": _build_ticket_info("en"),
 }
 
 

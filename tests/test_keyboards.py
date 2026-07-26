@@ -421,3 +421,23 @@ class TestEventsTodayKeyboardParams:
                                             show_more=show_more, upcoming=upcoming)
                 all_data = [btn.callback_data for row in kb.inline_keyboard for btn in row]
                 assert "menu:main" in all_data
+
+    def test_transfer_stations_are_flagged(self):
+        from bot.keyboards.inline import metro_line_detail_keyboard
+        stations = ["S1", "S2", "S3"]
+        stations_data = {"S1": {"lines": ["A"]},
+                         "S2": {"lines": ["A", "B"]},
+                         "S3": {"lines": ["A"]}}
+        kb = metro_line_detail_keyboard("A", stations, stations_data=stations_data)
+        labels = {btn.callback_data: btn.text for row in kb.inline_keyboard
+                  for btn in row if btn.callback_data}
+        assert "🔄" in labels["metro:station:S2"]
+        assert "🔄" not in labels["metro:station:S1"]
+
+    def test_no_transfer_flag_without_station_data(self):
+        from bot.keyboards.inline import metro_line_detail_keyboard
+        kb = metro_line_detail_keyboard("A", ["S1", "S2"])
+        for row in kb.inline_keyboard:
+            for btn in row:
+                if btn.callback_data and btn.callback_data.startswith("metro:station:"):
+                    assert "🔄" not in btn.text

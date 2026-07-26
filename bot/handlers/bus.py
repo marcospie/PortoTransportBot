@@ -1,7 +1,6 @@
 """Bus (STCP) related handlers."""
 
 import logging
-from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -11,21 +10,34 @@ from bot.keyboards.inline import (
     bus_stop_actions_keyboard,
     bus_stop_results_keyboard,
     bus_routes_keyboard,
-    cancel_keyboard,
 )
 from bot.database import is_favorite
 from bot.handlers.start import _clear_awaiting
 from bot.services import stcp
 from bot.utils.formatting import escape_md, format_bus_arrivals
 from bot.utils.i18n import get_lang, get_zone_display, t
+from bot.utils.telegram import (
+    pop_active_flag,
+    rows_of,
+    safe_callback_button,
+    safe_edit_message,
+    safe_edit_reply_markup,
+    t_safe,
+    truncate_label,
+)
 
 logger = logging.getLogger(__name__)
 
-# Conversation state keys (unified)
+# Conversation state key. Nothing sets it any more (stop search moved to inline
+# mode); it is still honoured so a pending prompt from an older session, or a
+# future non-inline entry point, still routes text correctly.
 AWAITING_BUS_FIND = "awaiting_bus_find"
-# Legacy keys kept for cleanup
-AWAITING_BUS_SEARCH = "awaiting_bus_search"
-AWAITING_BUS_CODE = "awaiting_bus_code"
+
+#: Stops shown per page in the route view.
+_ROUTE_STOPS_PER_PAGE = 8
+
+#: A stop code short enough to be a code rather than a name.
+_MAX_STOP_CODE_LEN = 6
 
 
 async def bus_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -169,16 +181,13 @@ async def bus_stop_callback(update: Update,
             stop_id, data["stop_name"], data["arrivals"],
         )
         back_cb = context.user_data.get("bus_back", "menu:bus")
-        try:
-            await safe_edit_message(
-                query, text,
-                reply_markup=bus_stop_actions_keyboard(stop_id, is_fav=is_fav, lang=lang, back_callback=back_cb),
-            )
-        except Exception as edit_err:
-            if "Message is not modified" in str(edit_err):
-                pass
-            else:
-                raise
+        # Refreshing before the next arrival changes leaves the message
+        # byte-identical; the shared helper absorbs Telegram's complaint.
+        await safe_edit_message(
+            query, text,
+            reply_markup=bus_stop_actions_keyboard(
+                stop_id, is_fav=is_fav, lang=lang, back_callback=back_cb),
+        )
 
         # Onboarding tip for first-time users
         if not context.user_data.get("onboarded"):
@@ -230,17 +239,157 @@ async def bus_stop_info_callback(update: Update,
     )
 
 
+def _parse_route_callback(data: str) -> tuple[str, int, int]:
+    """Parse ``bus:route:<num>[:<direction>[:<page>]]``.
+
+    The bare two-part form is still accepted so older messages (and the route
+    list keyboard, which lives in a module owned elsewhere) keep working.
+    """
+    parts = data.split(":")
+    route_num = parts[2] if len(parts) > 2 else ""
+    direction = 0
+    page = 0
+    if len(parts) > 3:
+        try:
+            direction = 1 if int(parts[3]) else 0
+        except ValueError:
+            direction = 0
+    if len(parts) > 4:
+        try:
+            page = max(0, int(parts[4]))
+        except ValueError:
+            page = 0
+    return route_num, direction, page
+
+
+def _direction_label(direction: int, lang: str) -> str:
+    """Human name of a route direction ("Ida" / "Volta")."""
+    if direction:
+        return t_safe("bus_direction_return", lang, pt="Volta", en="Return")
+    return t_safe("bus_direction_outbound", lang, pt="Ida", en="Outbound")
+
+
+def _bus_route_keyboard(route_num: str, direction: int, page: int,
+                        stops: list[dict], lang: str) -> InlineKeyboardMarkup:
+    """Keyboard for a route: tappable stops, paging, and a direction toggle.
+
+    Built locally on purpose (``bot/keyboards/inline.py`` is out of scope) and
+    every ``callback_data`` is byte-checked: stop names and route codes can be
+    accented, and each accent costs two bytes against Telegram's 64-byte cap.
+    """
+    start = page * _ROUTE_STOPS_PER_PAGE
+    page_stops = stops[start:start + _ROUTE_STOPS_PER_PAGE]
+
+    buttons = []
+    for stop in page_stops:
+        button = safe_callback_button(
+            truncate_label(f"\U0001f68f {stop['name']}", 30),
+            f"bus:stop:{stop['stop_id']}",
+        )
+        if button is not None:
+            buttons.append(button)
+    rows = rows_of(buttons, per_row=2)
+
+    nav = []
+    if page > 0:
+        prev_btn = safe_callback_button(
+            t("kb_previous", lang),
+            f"bus:route:{route_num}:{direction}:{page - 1}")
+        if prev_btn is not None:
+            nav.append(prev_btn)
+    if start + _ROUTE_STOPS_PER_PAGE < len(stops):
+        next_btn = safe_callback_button(
+            t("kb_next", lang),
+            f"bus:route:{route_num}:{direction}:{page + 1}")
+        if next_btn is not None:
+            nav.append(next_btn)
+    if nav:
+        rows.append(nav)
+
+    other = 1 - direction
+    toggle = safe_callback_button(
+        t_safe("kb_bus_direction", lang,
+               pt=f"\U0001f501 Sentido: {_direction_label(other, 'pt')}",
+               en=f"\U0001f501 Direction: {_direction_label(other, 'en')}"),
+        f"bus:route:{route_num}:{other}:0",
+    )
+    if toggle is not None:
+        rows.append([toggle])
+
+    rows.append([InlineKeyboardButton(t("kb_back", lang),
+                                      callback_data="bus:routes")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _bus_route_text(route_num: str, direction: int, stops: list[dict],
+                    lang: str) -> str:
+    """Message body listing the stop sequence of one direction of a route."""
+    header = [
+        t("bus_line_title", lang).format(route=escape_md(route_num)),
+        f"_{escape_md(_direction_label(direction, lang))}_",
+        t("bus_line_stops", lang).format(count=escape_md(str(len(stops)))),
+    ]
+
+    lines = list(header)
+    for i, stop in enumerate(stops):
+        prefix = "\U0001f534" if i in (0, len(stops) - 1) else "\u26aa"
+        lines.append(
+            f"  {prefix} {escape_md(stop['name'])} "
+            f"\\(`{escape_md(stop['stop_id'])}`\\)"
+        )
+
+    text = "\n".join(lines)
+    if len(text) <= 4000:
+        return text
+
+    # Too long for one Telegram message: keep both ends, elide the middle.
+    lines = header[:2] + [
+        t("bus_line_stops_short", lang).format(count=escape_md(str(len(stops)))),
+        f"\U0001f534 {escape_md(stops[0]['name'])} \\(`{escape_md(stops[0]['stop_id'])}`\\)",
+    ]
+    for stop in stops[1:3]:
+        lines.append(f"\u26aa {escape_md(stop['name'])}")
+    lines.append(t("bus_stops_more", lang).format(
+        count=escape_md(str(max(0, len(stops) - 4)))))
+    for stop in stops[-2:]:
+        lines.append(f"\u26aa {escape_md(stop['name'])}")
+    lines.append(
+        f"\U0001f534 {escape_md(stops[-1]['name'])} "
+        f"\\(`{escape_md(stops[-1]['stop_id'])}`\\)"
+    )
+    return "\n".join(lines)
+
+
 async def bus_route_callback(update: Update,
                               context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show route information."""
+    """Show a route's stop sequence, either direction, with tappable stops.
+
+    The direction used to be hardcoded to 0, so the return journey's stop order
+    was unreachable, and the stops were plain text nobody could act on.
+    """
     query = update.callback_query
     lang = get_lang(update)
     await query.answer(t("loading", lang))
 
-    route_num = query.data.split(":")[-1]
+    route_num, direction, page = _parse_route_callback(query.data)
     try:
-        # Get route stops for direction 0
-        stops = await stcp.get_route_stops(route_num, direction=0)
+        stops = await stcp.get_route_stops(route_num, direction=direction)
+
+        if not stops and direction:
+            # Circular routes publish only one direction: say so plainly and
+            # leave the toggle in place instead of looking broken.
+            await safe_edit_message(
+                query,
+                escape_md(t_safe(
+                    "bus_direction_unavailable", lang,
+                    pt=(f"A linha {route_num} nao publica paragens no sentido "
+                        f"{_direction_label(direction, 'pt').lower()}."),
+                    en=(f"Route {route_num} publishes no stops for the "
+                        f"{_direction_label(direction, 'en').lower()} direction."),
+                )),
+                reply_markup=_bus_route_keyboard(route_num, direction, 0, [], lang),
+            )
+            return
 
         if not stops:
             await safe_edit_message(
@@ -249,39 +398,20 @@ async def bus_route_callback(update: Update,
             )
             return
 
-        lines = [
-            t("bus_line_title", lang).format(route=escape_md(route_num)),
-            t("bus_line_stops", lang).format(count=escape_md(str(len(stops)))),
-        ]
+        text = _bus_route_text(route_num, direction, stops, lang)
+        text += "\n\n_" + escape_md(t_safe(
+            "bus_tap_stop_hint", lang,
+            pt="Toca numa paragem para ver as chegadas",
+            en="Tap a stop to see live arrivals",
+        )) + "_"
 
-        for i, stop in enumerate(stops):
-            if i == 0 or i == len(stops) - 1:
-                prefix = "🔴"
-            else:
-                prefix = "⚪"
-            lines.append(f"  {prefix} {escape_md(stop['name'])} \\(`{escape_md(stop['stop_id'])}`\\)")
-
-        # Truncate if too long
-        text = "\n".join(lines)
-        if len(text) > 4000:
-            lines = [
-                t("bus_line_title", lang).format(route=escape_md(route_num)),
-                t("bus_line_stops_short", lang).format(count=escape_md(str(len(stops)))),
-                f"🔴 {escape_md(stops[0]['name'])} \\(`{escape_md(stops[0]['stop_id'])}`\\)",
-            ]
-            for stop in stops[1:3]:
-                lines.append(f"⚪ {escape_md(stop['name'])}")
-            lines.append(t("bus_stops_more", lang).format(count=escape_md(str(len(stops) - 4))))
-            for stop in stops[-2:]:
-                lines.append(f"⚪ {escape_md(stop['name'])}")
-            lines.append(f"🔴 {escape_md(stops[-1]['name'])} \\(`{escape_md(stops[-1]['stop_id'])}`\\)")
-            text = "\n".join(lines)
+        # Coming back from a stop should return to this route view.
+        context.user_data["bus_back"] = f"bus:route:{route_num}:{direction}:{page}"
 
         await safe_edit_message(
             query, text,
-            reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(t("kb_back", lang), callback_data="bus:routes")],
-            ]),
+            reply_markup=_bus_route_keyboard(route_num, direction, page,
+                                             stops, lang),
         )
     except Exception:
         logger.exception("Error in bus_route_callback for %s", route_num)
@@ -293,42 +423,22 @@ async def bus_route_callback(update: Update,
 
 async def handle_bus_text_input(update: Update,
                                  context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Handle text input for bus find (unified search/code). Returns True if handled."""
+    """Handle text input for bus find (unified search/code). Returns True if handled.
+
+    Signature is unchanged: ``bot/main.py`` calls this for every plain text
+    message and relies on the boolean to decide whether another handler gets a
+    turn. Only the duplicated legacy-flag bookkeeping was removed.
+    """
     text = update.message.text.strip()
 
-    # Check unified state first, then legacy states
-    ts = context.user_data.get(AWAITING_BUS_FIND)
-    ts_search = context.user_data.get(AWAITING_BUS_SEARCH)
-    ts_code = context.user_data.get(AWAITING_BUS_CODE)
-
-    # Check if any flag is active and not expired (5 min timeout)
-    is_awaiting = False
-    for flag_ts in (ts, ts_search, ts_code):
-        if flag_ts is True:
-            is_awaiting = True
-            break
-        if isinstance(flag_ts, datetime) and (datetime.now() - flag_ts).total_seconds() < 300:
-            is_awaiting = True
-            break
-
-    if not is_awaiting:
-        # Clear any expired flags
-        context.user_data.pop(AWAITING_BUS_FIND, None)
-        context.user_data.pop(AWAITING_BUS_SEARCH, None)
-        context.user_data.pop(AWAITING_BUS_CODE, None)
+    if not pop_active_flag(context.user_data, AWAITING_BUS_FIND):
         return False
-
-    # Clear all awaiting flags
-    context.user_data.pop(AWAITING_BUS_FIND, None)
-    context.user_data.pop(AWAITING_BUS_SEARCH, None)
-    context.user_data.pop(AWAITING_BUS_CODE, None)
 
     lang = get_lang(update)
 
-    # Auto-detect: if short text with digits, treat as stop code
-    if len(text) <= 6 and any(c.isdigit() for c in text):
-        stop_id = text.upper()
-        await _send_stop_realtime(update.message, stop_id, context, lang=lang)
+    # Auto-detect: short text containing digits is a stop code, not a name.
+    if len(text) <= _MAX_STOP_CODE_LEN and any(c.isdigit() for c in text):
+        await _send_stop_realtime(update.message, text.upper(), context, lang=lang)
     else:
         await _search_and_show_stops(update.message, text, context, lang=lang)
 
@@ -365,7 +475,7 @@ async def bus_location_callback(update: Update,
     try:
         user_id = query.from_user.id
         is_fav = await is_favorite(user_id, "bus", stop_id)
-        await query.edit_message_reply_markup(reply_markup=None)
+        await safe_edit_reply_markup(query, None)
         info = await stcp.get_stop_info(stop_id)
         lat = info.get("lat")
         lon = info.get("lon")

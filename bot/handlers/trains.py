@@ -55,10 +55,15 @@ _FALLBACK_STRINGS: dict[str, dict[str, str]] = {
         "pt": "\U0001f550 *Frequências CP*",
         "en": "\U0001f550 *CP Frequencies*",
     },
-    "trains_peak": {"pt": "Hora de ponta", "en": "Peak"},
-    "trains_offpeak": {"pt": "Fora de ponta", "en": "Off\\-peak"},
-    "trains_weekend": {"pt": "Fim de semana", "en": "Weekend"},
-    "trains_schedule": {"pt": "\U0001f552 Horário:", "en": "\U0001f552 Hours:"},
+    # NOTE: like every other i18n value in this project these are already
+    # MarkdownV2-escaped, so they are inserted without a further escape_md().
+    "trains_peak": {"pt": "\U0001f3e2 Hora ponta", "en": "\U0001f3e2 Peak hours"},
+    "trains_offpeak": {"pt": "☀️ Fora de ponta",
+                       "en": "☀️ Off\\-peak"},
+    "trains_weekend": {"pt": "\U0001f4c5 Fim\\-de\\-semana",
+                       "en": "\U0001f4c5 Weekend"},
+    "trains_schedule": {"pt": "⏰ *Horário de funcionamento:*",
+                        "en": "⏰ *Operating hours:*"},
     "trains_stations_label": {"pt": "estações", "en": "stations"},
     "trains_type_label": {"pt": "Tipo", "en": "Type"},
     "trains_closed": {
@@ -288,15 +293,15 @@ async def train_freq_callback(update: Update,
 
     blocks = []
     for line_id, data in CP_LINES.items():
-        freq = cp.get_frequency_info(line_id)
+        freq = cp.get_frequency_info(line_id, lang)
         blocks.append(
             f"{data['emoji']} *{escape_md(data['name'])}*\n"
-            f"   {escape_md(_t('trains_peak', lang))}: {escape_md(freq['peak'])}\n"
-            f"   {escape_md(_t('trains_offpeak', lang))}: {escape_md(freq['off_peak'])}\n"
-            f"   {escape_md(_t('trains_weekend', lang))}: {escape_md(freq['weekend'])}"
+            f"   {_t('trains_peak', lang)}: {escape_md(freq['peak'])}\n"
+            f"   {_t('trains_offpeak', lang)}: {escape_md(freq['off_peak'])}\n"
+            f"   {_t('trains_weekend', lang)}: {escape_md(freq['weekend'])}"
         )
 
-    hours = cp.get_frequency_info("aveiro")["hours"]
+    hours = cp.get_frequency_info("aveiro", lang)["hours"]
     text = (
         _t("trains_freq_title", lang) + "\n\n"
         + "\n\n".join(blocks)
@@ -341,8 +346,7 @@ async def train_line_callback(update: Update,
             lines.append(f"_{escape_md(route)}_")
         if line_type:
             lines.append(
-                f"{escape_md(_t('trains_type_label', lang))}: "
-                f"{escape_md(line_type)}\n"
+                f"{_t('trains_type_label', lang)}: {escape_md(line_type)}\n"
             )
 
         for i, station_name in enumerate(stations):
@@ -468,8 +472,7 @@ async def train_station_lines_callback(update: Update,
         lines_text.append(
             f"{line['emoji']} *{escape_md(line['name'])}*\n"
             f"   \U0001f4cd {escape_md(line['route'])}\n"
-            f"   {escape_md(_t('trains_type_label', lang))}: "
-            f"{escape_md(line['type'])}"
+            f"   {_t('trains_type_label', lang)}: {escape_md(line['type'])}"
         )
 
     header = escape_md(info.get("display") or info["name"])

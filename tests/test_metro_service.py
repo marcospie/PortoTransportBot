@@ -257,7 +257,9 @@ class TestParseStoptimes:
         assert "Estádio do Dragão" in directions
         for d in deps:
             assert d["line_code"] == "A"
-            assert d["realtime"] is True
+            # The mock says realTime=false, so the departure must NOT claim to
+            # be live — it is a timetable time.
+            assert d["realtime"] is False
             assert d["estimated"] is False
 
     def test_filters_non_metro(self):

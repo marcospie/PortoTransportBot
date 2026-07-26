@@ -182,6 +182,52 @@ class TestWeatherHandlers:
         update.callback_query.answer.assert_called_once()
         update.callback_query.edit_message_text.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_weather_refresh_tolerates_message_not_modified(self):
+        """Tapping refresh twice must not raise (and must not show an error)."""
+        from bot.handlers.weather import weather_menu_callback
+        from telegram.error import BadRequest
+
+        update = _make_update(lang="pt")
+        context = _make_context()
+        update.callback_query.edit_message_text = AsyncMock(
+            side_effect=BadRequest("Message is not modified")
+        )
+
+        await weather_menu_callback(update, context)  # must not raise
+
+        update.callback_query.edit_message_text.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_weather_refresh_reraises_other_errors(self):
+        """Real Telegram failures must still surface to the error handler."""
+        from bot.handlers.weather import weather_menu_callback
+        from telegram.error import BadRequest
+
+        update = _make_update(lang="pt")
+        context = _make_context()
+        update.callback_query.edit_message_text = AsyncMock(
+            side_effect=BadRequest("Some other Telegram error")
+        )
+
+        with pytest.raises(BadRequest):
+            await weather_menu_callback(update, context)
+
+    @pytest.mark.asyncio
+    async def test_weather_refresh_uses_safe_edit_helper(self):
+        """The refresh path must go through the shared safe-edit helper."""
+        import bot.handlers.weather as weather_mod
+
+        assert hasattr(weather_mod, "safe_edit_message")
+        update = _make_update(lang="pt")
+        context = _make_context()
+
+        with patch.object(weather_mod, "safe_edit_message",
+                          new_callable=AsyncMock) as mock_edit:
+            await weather_mod.weather_menu_callback(update, context)
+
+        mock_edit.assert_called_once()
+
 
 # ===================================================================
 # i18n tests

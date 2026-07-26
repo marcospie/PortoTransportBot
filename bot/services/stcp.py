@@ -561,11 +561,10 @@ async def download_stcp_gtfs() -> bool:
     GTFS_DIR.mkdir(parents=True, exist_ok=True)
     zip_path = GTFS_DIR / "stcp.zip"
 
-    urls: list[str] = [GTFS_STCP_URL]
     content = await _download(GTFS_STCP_URL)
     if content is None:
         discovered = await _discover_latest_gtfs_url()
-        if discovered and discovered not in urls:
+        if discovered and discovered != GTFS_STCP_URL:
             content = await _download(discovered)
 
     if content is None:

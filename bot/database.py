@@ -491,6 +491,43 @@ async def update_user_setting(user_id: int, key: str, value) -> None:
         )
 
 
+# Value of the ``notifications`` setting that means "the user opted in".
+NOTIFICATIONS_ON = "on"
+
+
+async def get_users_with_notifications_on() -> list[int]:
+    """Return the user IDs that have opted in to proactive notifications.
+
+    Consumed by ``bot/services/notifications.py``.  It is implemented here, for
+    both backends, because a caller outside this module can only enumerate the
+    JSON settings directory - which is always empty in PostgreSQL mode, so
+    opted-in users would silently never be notified.
+
+    Never returns users whose setting is anything other than ``'on'``: silence is
+    the safe failure mode for proactive messaging.
+    """
+    if not _use_db:
+        if not _SETTINGS_DIR.exists():
+            return []
+        user_ids: list[int] = []
+        for path in sorted(_SETTINGS_DIR.glob("*.json")):
+            try:
+                user_id = int(path.stem)
+            except ValueError:
+                continue
+            settings = _json_load_settings(user_id)
+            if str(settings.get("notifications", "")).strip().lower() == NOTIFICATIONS_ON:
+                user_ids.append(user_id)
+        return user_ids
+
+    async with _pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT user_id FROM user_settings WHERE notifications = $1",
+            NOTIFICATIONS_ON,
+        )
+        return [int(row["user_id"]) for row in rows]
+
+
 # ===================================================================
 # Commuter profiles
 # ===================================================================

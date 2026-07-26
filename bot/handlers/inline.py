@@ -13,7 +13,7 @@ from telegram.ext import ContextTypes
 
 from bot.services import stcp
 from bot.services.stcp import search_stops_local
-from bot.services.metro import search_stations, get_next_departures
+from bot.services.metro import search_stations
 from bot.services.metrobus import search_stops as search_metrobus_stops
 from bot.services.cp import search_stations as search_train_stations
 from bot.utils.formatting import escape_md
@@ -280,7 +280,7 @@ async def _add_bus_stop_by_code(stop_code: str, results: list,
                     else _t("inline_bus_no_arrivals", lang))
             results.append(InlineQueryResultArticle(
                 id=str(uuid.uuid4()),
-                title=f"🚌 " + _t("inline_bus_stop", lang).format(code=stop_code),
+                title="🚌 " + _t("inline_bus_stop", lang).format(code=stop_code),
                 description=desc,
                 input_message_content=InputTextMessageContent(
                     message_text=text,

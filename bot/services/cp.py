@@ -112,6 +112,40 @@ _ROUTE_NAME_TO_LINE: dict[str, str] = {
     "linha de leixoes": "leixoes",
 }
 
+# CP's GTFS feed stores headsigns without diacritics ("Regua", "Famalicao").
+# Destinations that are not Porto-area stations of ours get their accents back
+# here; anything unknown is shown exactly as CP publishes it.
+_HEADSIGN_FIXES: dict[str, str] = {
+    "regua": "Régua",
+    "peso da regua": "Peso da Régua",
+    "famalicao": "Famalicão",
+    "vila nova de famalicao": "Vila Nova de Famalicão",
+    "valenca": "Valença",
+    "lisboa santa apolonia": "Lisboa Santa Apolónia",
+    "lisboa oriente": "Lisboa Oriente",
+    "coimbra b": "Coimbra-B",
+    "entroncamento": "Entroncamento",
+    "pocinho": "Pocinho",
+    "vila real de santo antonio": "Vila Real de Santo António",
+    "figueira da foz": "Figueira da Foz",
+    "sao bento": "Porto-São Bento",
+    "porto sao bento": "Porto-São Bento",
+    "porto campanha": "Porto-Campanhã",
+    "vila nova de gaia devesas": "Vila Nova de Gaia-Devesas",
+    "aguas santas palmilheira": "Águas Santas-Palmilheira",
+    "sao frutuoso": "São Frutuoso",
+    "sao mamede de infesta": "São Mamede de Infesta",
+    "hospital sao joao": "Hospital São João",
+    "suzao": "Suzão",
+    "cortegaca": "Cortegaça",
+    "canicos": "Caniços",
+    "livracao": "Livração",
+    "vila mea": "Vila Meã",
+    "azurara": "Azurara",
+    "ancora praia": "Âncora-Praia",
+    "vigo guixar": "Vigo-Guixar",
+}
+
 # CP long-distance / regional service codes -> readable label.
 _SERVICE_LABELS: dict[str, str] = {
     "AP": "Alfa Pendular",
@@ -423,11 +457,15 @@ def _resolve_or_fuzzy(name: str, min_score: int = 40) -> str | None:
 
 
 def display_name(name: str) -> str:
-    """Human-facing name for a station (correctly accented, official form)."""
+    """Human-facing name for a station or destination (correctly accented)."""
     resolved = resolve_station_name(name)
-    if resolved is None:
-        return name
-    return DISPLAY_NAMES.get(resolved, resolved)
+    if resolved is not None:
+        return DISPLAY_NAMES.get(resolved, resolved)
+    if isinstance(name, str):
+        fixed = _HEADSIGN_FIXES.get(_normalize(name))
+        if fixed:
+            return fixed
+    return name
 
 
 def _lines_info(line_ids: list[str], detailed: bool = False) -> list[dict]:
@@ -935,12 +973,13 @@ def get_line_stations_display(line_id: str) -> list[str]:
     return [display_name(name) for name in get_line_stations(line_id)]
 
 
-def get_frequency_info(line_id: str) -> dict:
+def get_frequency_info(line_id: str, lang: str = "pt") -> dict:
     """Typical frequency information for a line (an estimate, not a timetable)."""
+    prefix = "Every" if lang == "en" else "A cada"
     return {
-        "peak": f"A cada {FREQUENCIES['peak'].get(line_id, '?')} min",
-        "off_peak": f"A cada {FREQUENCIES['off_peak'].get(line_id, '?')} min",
-        "weekend": f"A cada {FREQUENCIES['weekend'].get(line_id, '?')} min",
+        "peak": f"{prefix} {FREQUENCIES['peak'].get(line_id, '?')} min",
+        "off_peak": f"{prefix} {FREQUENCIES['off_peak'].get(line_id, '?')} min",
+        "weekend": f"{prefix} {FREQUENCIES['weekend'].get(line_id, '?')} min",
         "hours": (
             f"{OPERATING_HOURS['start'].strftime('%H:%M')} - "
             f"{OPERATING_HOURS['end'].strftime('%H:%M')}"

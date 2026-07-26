@@ -1,6 +1,8 @@
 """Main entry point for the Porto Transport Bot."""
 
 import logging
+from datetime import time as dt_time
+from zoneinfo import ZoneInfo
 
 from telegram import BotCommand, BotCommandScopeAllPrivateChats, MenuButtonCommands, Update
 from telegram.ext import (
@@ -14,7 +16,8 @@ from telegram.ext import (
 
 from bot.config import TELEGRAM_BOT_TOKEN
 from bot.database import init_db, close_db
-from bot.handlers import accessibility, alerts, bus, commuter, events, favorites, inline, location, metro, metrobus, routes, settings, start, tourist, trains, trip_planner, weather, zones
+from bot.handlers import accessibility, alerts, bus, commuter, events, favorites, inline, location, metro, metrobus, routes, settings, start, tourist, trains, weather, zones
+from bot.services import notifications
 from bot.services.metro import download_gtfs
 from bot.services.stcp import download_stcp_gtfs
 from bot.utils.i18n import get_lang, t
@@ -25,17 +28,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+PORTO_TZ = ZoneInfo("Europe/Lisbon")
+
+# Schedules are republished overnight; refresh them daily so a long-running
+# process does not keep serving last week's timetable.
+GTFS_REFRESH_TIME = dt_time(4, 15, tzinfo=PORTO_TZ)
+
 
 async def error_handler(update: object, context) -> None:
     """Global error handler for unhandled exceptions."""
     logger.error("Unhandled exception:", exc_info=context.error)
     if update and isinstance(update, Update):
+        lang = get_lang(update)
         try:
             if update.callback_query:
-                await update.callback_query.answer("Erro interno. Tenta novamente.")
+                # Toasts are not Markdown-parsed, so send the plain text.
+                await update.callback_query.answer(routes.plain(t("error_generic", lang)))
             elif update.effective_message:
                 await update.effective_message.reply_text(
-                    "Ocorreu um erro. Tenta novamente ou usa /start.")
+                    t("error_generic", lang),
+                    parse_mode="MarkdownV2",
+                )
         except Exception:
             pass
 
@@ -84,21 +97,26 @@ async def handle_text(update: Update, context) -> None:
         # Location button text - ignore, location handler handles actual location
         return
 
-    # Check if any handler is awaiting input
-    if await commuter.handle_commuter_text_input(update, context):
-        return
-    if await routes.handle_route_text_input(update, context):
-        return
-    if await bus.handle_bus_text_input(update, context):
-        return
-    if await metro.handle_metro_text_input(update, context):
-        return
-    if await trains.handle_train_text_input(update, context):
-        return
-    if await zones.handle_zones_text_input(update, context):
-        return
-    if await accessibility.handle_accessibility_text_input(update, context):
-        return
+    # Give every "awaiting input" flow a chance, in priority order. The first
+    # one that claims the message wins.
+    #
+    # NOTE: bus.handle_bus_text_input and metro.handle_metro_text_input are
+    # currently inert - their AWAITING_BUS_FIND / AWAITING_METRO_SEARCH flags
+    # are read but never set anywhere since the switch to inline search, so they
+    # always return False. They stay in the chain so the ordering is still right
+    # if those flows come back; the dead flag machinery itself lives in
+    # bot/handlers/bus.py and bot/handlers/metro.py and should be removed there.
+    for claim in (
+        commuter.handle_commuter_text_input,
+        routes.handle_route_text_input,
+        bus.handle_bus_text_input,
+        metro.handle_metro_text_input,
+        trains.handle_train_text_input,
+        zones.handle_zones_text_input,
+        accessibility.handle_accessibility_text_input,
+    ):
+        if await claim(update, context):
+            return
 
     # If it looks like a stop code (short, uppercase, with numbers)
     if len(text) <= 6 and any(c.isdigit() for c in text):
@@ -286,6 +304,28 @@ async def post_init(application: Application) -> None:
     except Exception:
         logger.exception("Failed to register bot commands")
 
+    await refresh_gtfs()
+
+    # Keep the schedules fresh: without this, a bot that stays up for weeks
+    # keeps serving whatever timetable it downloaded at boot.
+    job_queue = getattr(application, "job_queue", None)
+    if job_queue is None:
+        logger.warning("No JobQueue available - GTFS will not be refreshed daily")
+    else:
+        job_queue.run_daily(
+            gtfs_refresh_job,
+            time=GTFS_REFRESH_TIME,
+            name="gtfs_daily_refresh",
+        )
+        logger.info("Daily GTFS refresh scheduled for %s Europe/Lisbon",
+                    GTFS_REFRESH_TIME.strftime("%H:%M"))
+
+    # Proactive notifications (opt-in only; see bot/services/notifications.py).
+    notifications.register_jobs(application)
+
+
+async def refresh_gtfs() -> None:
+    """Download the Metro and STCP GTFS feeds."""
     logger.info("Attempting to download Metro GTFS data...")
     success = await download_gtfs()
     if success:
@@ -301,25 +341,25 @@ async def post_init(application: Application) -> None:
         logger.warning("Could not load STCP GTFS data - nearby bus search limited")
 
 
+async def gtfs_refresh_job(context) -> None:
+    """JobQueue wrapper around :func:`refresh_gtfs`."""
+    try:
+        await refresh_gtfs()
+    except Exception:
+        logger.exception("Daily GTFS refresh failed")
+
+
 async def post_shutdown(application: Application) -> None:
     """Clean up resources on shutdown."""
     await close_db()
 
 
-def main() -> None:
-    if not TELEGRAM_BOT_TOKEN:
-        print("Error: TELEGRAM_BOT_TOKEN not set.")
-        print("Copy .env.example to .env and add your bot token.")
-        return
+def register_handlers(app) -> None:
+    """Register every command, callback and message handler on *app*.
 
-    app = (
-        Application.builder()
-        .token(TELEGRAM_BOT_TOKEN)
-        .post_init(post_init)
-        .post_shutdown(post_shutdown)
-        .build()
-    )
-
+    Split out of :func:`main` so the registration table can be asserted in
+    tests without starting a real bot.
+    """
     # Command handlers
     app.add_handler(CommandHandler("start", start.start_command))
     app.add_handler(CommandHandler("help", start.help_command))
@@ -438,6 +478,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(routes.route_plan_callback, pattern=r"^plan:route$"))
     app.add_handler(CallbackQueryHandler(routes.route_plan_callback, pattern=r"^route:plan$"))
     app.add_handler(CallbackQueryHandler(routes.trip_detail_callback, pattern=r"^trip:detail:\d+$"))
+    # "Use my location" as the trip origin (routes.py builds this button).
+    app.add_handler(CallbackQueryHandler(routes.trip_use_location_callback,
+                                        pattern=r"^trip:use_location_origin$"))
 
     # Favorites callbacks
     app.add_handler(CallbackQueryHandler(favorites.favorites_callback, pattern=r"^menu:favorites$"))
@@ -484,6 +527,23 @@ def main() -> None:
 
     # Global error handler for unhandled exceptions
     app.add_error_handler(error_handler)
+
+
+def main() -> None:
+    if not TELEGRAM_BOT_TOKEN:
+        print("Error: TELEGRAM_BOT_TOKEN not set.")
+        print("Copy .env.example to .env and add your bot token.")
+        return
+
+    app = (
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .build()
+    )
+
+    register_handlers(app)
 
     logger.info("Bot starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

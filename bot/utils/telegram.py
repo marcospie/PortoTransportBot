@@ -102,6 +102,24 @@ def safe_callback_button(label: str, data: str) -> Optional[InlineKeyboardButton
     return InlineKeyboardButton(label, callback_data=data)
 
 
+def pop_active_flag(user_data: dict, key: str, timeout: int = 300) -> bool:
+    """Consume an ``awaiting_*`` conversation flag.
+
+    The flag is always removed (an expired prompt must not keep swallowing the
+    user's next message), and True is returned only when it was still live.
+    A flag may be ``True`` (legacy boolean) or a ``datetime`` set when the
+    prompt was shown.
+    """
+    from datetime import datetime
+
+    value = user_data.pop(key, None)
+    if value is True:
+        return True
+    if isinstance(value, datetime):
+        return (datetime.now() - value).total_seconds() < timeout
+    return False
+
+
 def truncate_label(text: str, max_chars: int = 30) -> str:
     """Shorten a button label so it stays readable on narrow phone screens."""
     if len(text) <= max_chars:

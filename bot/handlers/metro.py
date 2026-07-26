@@ -1,7 +1,6 @@
 """Metro do Porto related handlers."""
 
 import logging
-from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -21,10 +20,18 @@ from bot.services import metro
 from bot.services.metro import STATIONS
 from bot.utils.formatting import escape_md, format_metro_schedule, format_metro_line_info
 from bot.utils.i18n import get_lang, get_zone_display, t
-from bot.utils.telegram import safe_edit_message
+from bot.utils.telegram import (
+    pop_active_flag,
+    safe_edit_message,
+    safe_edit_reply_markup,
+    t_safe,
+)
 
 logger = logging.getLogger(__name__)
 
+# Conversation state key. Nothing sets it any more (station search moved to
+# inline mode); it is still honoured so a pending prompt from an older session,
+# or a future non-inline entry point, still routes text correctly.
 AWAITING_METRO_SEARCH = "awaiting_metro_search"
 
 
@@ -97,7 +104,8 @@ async def metro_lines_callback(update: Update,
         lines_text.append(
             f"{line['emoji']} *{escape_md(line['name'])}* "
             f"\\({escape_md(str(line['station_count']))} "
-            + ("estações" if lang == "pt" else "stations")
+            + t_safe("metro_stations_label", lang,
+                     pt="estações", en="stations")
             + "\\)\n"
             f"   📍 {escape_md(line['route'])}"
         )
@@ -160,17 +168,18 @@ async def metro_line_callback(update: Update,
         stations = metro.get_line_stations(line_code)
         text = format_metro_line_info(line_code, line_data, stations,
                                       stations_data=STATIONS)
-        tap_hint = "_Toca numa estação para ver horários_" if lang == "pt" else "_Tap a station to see schedules_"
-        text += "\n\n" + tap_hint
+        tap_hint = t_safe("metro_tap_station_hint", lang,
+                          pt="Toca numa estação para ver horários",
+                          en="Tap a station to see schedules")
+        text += "\n\n_" + escape_md(tap_hint) + "_"
 
         # Remember where to go back from station detail
         context.user_data["metro_back"] = f"metro:line:{line_code}"
 
         await safe_edit_message(
             query, text,
-            reply_markup=metro_line_detail_keyboard(line_code, stations,
-            stations_data=STATIONS,
-            lang=lang),
+            reply_markup=metro_line_detail_keyboard(
+                line_code, stations, stations_data=STATIONS, lang=lang),
         )
     except Exception:
         logger.exception("Error in metro_line_callback for %s", line_code)
@@ -334,7 +343,7 @@ async def metro_location_callback(update: Update,
     try:
         user_id = query.from_user.id
         is_fav = await is_favorite(user_id, "metro", station_name)
-        await query.edit_message_reply_markup(reply_markup=None)
+        await safe_edit_reply_markup(query, None)
         coords = metro.get_station_coordinates(station_name)
         if coords:
             await context.bot.send_location(
@@ -365,23 +374,18 @@ async def metro_location_callback(update: Update,
 
 async def handle_metro_text_input(update: Update,
                                     context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Handle text input for metro search. Returns True if handled."""
-    ts = context.user_data.get(AWAITING_METRO_SEARCH)
+    """Handle text input for metro search. Returns True if handled.
+
+    Signature is unchanged: ``bot/main.py`` calls this for every plain text
+    message and uses the boolean to decide whether other handlers get a turn.
+    """
+    if not pop_active_flag(context.user_data, AWAITING_METRO_SEARCH):
+        return False
+
     lang = get_lang(update)
-    if ts and isinstance(ts, datetime) and (datetime.now() - ts).total_seconds() < 300:
-        context.user_data.pop(AWAITING_METRO_SEARCH, None)
-        query = update.message.text.strip()
-        await _search_and_show_stations(update.message, query, context, lang=lang)
-        return True
-    elif ts is True:
-        # Legacy boolean flag
-        context.user_data.pop(AWAITING_METRO_SEARCH, None)
-        query = update.message.text.strip()
-        await _search_and_show_stations(update.message, query, context, lang=lang)
-        return True
-    # Clear expired flag
-    context.user_data.pop(AWAITING_METRO_SEARCH, None)
-    return False
+    query = update.message.text.strip()
+    await _search_and_show_stations(update.message, query, context, lang=lang)
+    return True
 
 
 async def _search_and_show_stations(message, query: str, context=None, lang: str = "pt") -> None:

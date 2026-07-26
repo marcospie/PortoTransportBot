@@ -702,21 +702,34 @@ def get_zone_for_station(station_name: str) -> str | None:
 
 
 def suggest_stations(query: str, limit: int = 3) -> list[str]:
-    """Closest station names to ``query`` -- used to offer typo suggestions."""
+    """Closest station names to ``query`` -- used to offer typo suggestions.
+
+    Combines the shared token matcher in :mod:`bot.utils.search` with a
+    character-level close-match pass, because the token matcher only recognises
+    whole tokens and so misses ordinary typos such as "Trindad3".
+    """
     if not query or not query.strip():
         return []
     candidates = list(ZONES.keys()) + sorted(OUTSIDE_ANDANTE)
+    names: list[str] = []
+
     try:
         from bot.utils.search import fuzzy_search
-        matches = fuzzy_search(query, candidates, min_score=15,
-                               max_results=limit * 3)
-        names = [name for name, _score in matches]
+        names = [name for name, _score in
+                 fuzzy_search(query, candidates, min_score=15,
+                              max_results=limit * 3)]
     except Exception:  # pragma: no cover
         names = []
 
-    if not names:
-        needle = _normalise(query)
-        names = [n for n in candidates if needle and needle in _normalise(n)]
+    needle = _normalise(query)
+    if needle:
+        names += [n for n in candidates if needle in _normalise(n)]
+
+        # Character-level fallback catches single-character typos.
+        import difflib
+        by_normalised = {_normalise(n): n for n in candidates}
+        names += [by_normalised[m] for m in difflib.get_close_matches(
+            needle, list(by_normalised), n=limit * 2, cutoff=0.7)]
 
     seen: set[str] = set()
     out: list[str] = []

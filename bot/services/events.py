@@ -441,6 +441,17 @@ async def refresh_events(force: bool = False) -> bool:
     return True
 
 
+#: Set to False to stop the synchronous getters from kicking off background
+#: refreshes (e.g. in a worker that refreshes on its own schedule).
+AUTO_REFRESH = True
+
+
+def _auto_refresh_enabled() -> bool:
+    # Never start background network tasks inside a test run: they outlive the
+    # test's event loop and turn into "Task was destroyed" noise.
+    return AUTO_REFRESH and "PYTEST_CURRENT_TEST" not in os.environ
+
+
 def _maybe_schedule_refresh() -> None:
     """Kick off a background fixture refresh when an event loop is running.
 
@@ -448,6 +459,8 @@ def _maybe_schedule_refresh() -> None:
     live feed is refreshed opportunistically instead of blocking a request.
     """
     global _refresh_task
+    if not _auto_refresh_enabled():
+        return
     if _last_fixture_refresh is not None:
         age = (now_in_porto() - _last_fixture_refresh).total_seconds()
         if age < FIXTURES_REFRESH_SECONDS:

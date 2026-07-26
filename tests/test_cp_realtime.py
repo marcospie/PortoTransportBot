@@ -63,9 +63,6 @@ SAMPLE_STOP_TIMES = [
     _stop_time("Regua", "2026-07-26T14:25:00Z", "IR", trip="871"),
 ]
 
-NOW = None  # replaced per-test
-
-
 def _now():
     from datetime import datetime, timezone
     return datetime(2026, 7, 26, 14, 0, 0, tzinfo=timezone.utc)
@@ -787,8 +784,7 @@ class TestTrainHandlers:
         assert "Frequências CP" in text
         assert "não é horário real" in text
         for data in cp.CP_LINES.values():
-            assert data["name"].replace("ã", "ã") in text or \
-                data["name"] in text
+            assert data["name"] in text, data["name"]
 
     @pytest.mark.asyncio
     async def test_menu_keyboard_has_frequencies_button(self):

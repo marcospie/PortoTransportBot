@@ -301,12 +301,15 @@ async def resolve_stop_id(station_name: str,
     resolved = await _geocode_stop_id(station_name)
     if resolved:
         _stop_id_cache.set(cache_key, resolved)
+        # Mark as checked against the live API so we do not re-geocode on
+        # every request when the feed simply has nothing scheduled.
+        _stop_id_cache.set(f"verified:{station_name}", resolved)
         return resolved
 
     # Remember the failure briefly so we do not geocode on every request, and
     # warn loudly: silent fallback to frequency guesses is what made the
     # previous breakage invisible.
-    _stop_id_cache.set(f"resolvefail:{station_name}", _FAILED)
+    _stop_id_cache.set(f"resolvefail:{station_name}", _FAILED, ttl=300)
     logger.warning(
         "Could not resolve a MOTIS stop id for %s; falling back to the "
         "hardcoded id (%s). Realtime lookups may be degraded.",
@@ -467,8 +470,10 @@ async def get_realtime_departures(station_name: str,
     stop_times = await _query_stoptimes(stop_id, count=count * 3)
     departures = _parse_stoptimes(stop_times) if stop_times else []
 
-    if not departures:
-        # Maybe the id went stale. Re-resolve once and retry.
+    if not departures and _stop_id_cache.get(f"verified:{station_name}") is None:
+        # Maybe the id went stale. Re-resolve once and retry. The "verified"
+        # marker stops this from geocoding on every request when the real reason
+        # for the empty result is that the feed has no service scheduled.
         fresh_id = await resolve_stop_id(station_name, force_refresh=True)
         if fresh_id and fresh_id != stop_id:
             logger.warning(
@@ -478,6 +483,9 @@ async def get_realtime_departures(station_name: str,
             departures = _parse_stoptimes(stop_times) if stop_times else []
 
     if not departures:
+        # Cache the empty result briefly so a feed with no current service does
+        # not cause a fresh 10s-timeout request on every user interaction.
+        _cache.set(cache_key, [], ttl=30)
         return []
 
     # Balance directions so both are represented, then limit

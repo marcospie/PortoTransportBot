@@ -271,12 +271,16 @@ def metro_line_detail_keyboard(line_code: str, stations: list[str],
         page_stations = list(stations[start:start + per_page])
 
     buttons = []
-    # Station buttons in rows of 2, in line order.
+    # Station buttons in rows of 2, in line order.  Interchanges are flagged so
+    # the line view still tells the user where they can transfer.
     row: list[InlineKeyboardButton] = []
     for name in page_stations:
-        label = f"{emoji} {name}"
+        is_transfer = bool(stations_data
+                           and len(stations_data.get(name, {}).get("lines", [])) > 1)
+        suffix = " 🔄" if is_transfer else ""
+        label = f"{emoji} {name}{suffix}"
         if len(label) > 40:
-            label = f"{emoji} {name[:32]}..."
+            label = f"{emoji} {name[:32]}...{suffix}"
         cb_data = f"metro:station:{name}"
         # Telegram limits callback_data to 64 bytes
         if len(cb_data.encode("utf-8")) > 64:

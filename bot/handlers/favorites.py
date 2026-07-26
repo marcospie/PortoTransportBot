@@ -128,11 +128,16 @@ def _back_callback(rows: list | None, fav_type: str) -> str:
 
 
 def _message_markdown(query) -> str | None:
-    """Return the current message text as MarkdownV2, or None."""
+    """Return the current message text as MarkdownV2, or None.
+
+    Only the pre-escaped MarkdownV2 renderings are acceptable: re-sending the
+    plain ``.text`` with ``parse_mode="MarkdownV2"`` would fail on any name
+    containing a hyphen, dot or parenthesis.
+    """
     message = getattr(query, "message", None)
     if message is None:
         return None
-    for attr in ("text_markdown_v2", "text_markdown_v2_urled", "text"):
+    for attr in ("text_markdown_v2", "text_markdown_v2_urled"):
         try:
             value = getattr(message, attr, None)
         except Exception:
@@ -154,14 +159,16 @@ async def _rerender_detail_view(query, fav_type: str, fav_id: str,
     if builder is None:
         return False
 
-    text = _message_markdown(query)
-    if text is None:
-        return False
-
     keyboard = builder(fav_id, is_fav=is_fav, lang=lang,
                        back_callback=_back_callback(rows, fav_type))
+    text = _message_markdown(query)
     try:
-        await safe_edit_message(query, text, reply_markup=keyboard)
+        if text is None:
+            # Text could not be recovered — swap just the keyboard so the
+            # user still keeps whatever they were reading.
+            await query.edit_message_reply_markup(reply_markup=keyboard)
+        else:
+            await safe_edit_message(query, text, reply_markup=keyboard)
     except Exception:
         logger.exception("Could not re-render detail view for %s:%s",
                          fav_type, fav_id)

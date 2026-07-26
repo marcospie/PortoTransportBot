@@ -1,4 +1,14 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+#: Timestamps shown to users are Porto's wall clock, not the host's — a bot
+#: deployed on a UTC host would otherwise stamp "Atualizado às" an hour early.
+PORTO_TZ = ZoneInfo("Europe/Lisbon")
+
+
+def _now_hhmm() -> str:
+    return escape_md(datetime.now(PORTO_TZ).strftime("%H:%M"))
+
 
 # Footer / status wording.  This module renders raw strings rather than going
 # through bot.utils.i18n (no translation keys exist for these), so the two
@@ -54,7 +64,7 @@ def _timestamp_footer(departures: list[dict], lang: str = "pt") -> str:
     "Estimativa", and plain timetable data gets "Horário previsto" — so the
     message never implies live tracking when none happened.
     """
-    timestamp = escape_md(datetime.now().strftime("%H:%M"))
+    timestamp = _now_hhmm()
     if any(d.get("estimated") for d in departures):
         return f"_{_label('estimate', lang)}  ·  {timestamp}_"
     if any(d.get("realtime") for d in departures):
@@ -130,7 +140,7 @@ def format_bus_arrivals(stop_code: str, stop_name: str, arrivals: list[dict],
 
 def _bus_footer(arrivals: list[dict], source: str | None, lang: str) -> str:
     """Footer for bus arrivals, reflecting whether data is live or scheduled."""
-    timestamp = escape_md(datetime.now().strftime("%H:%M"))
+    timestamp = _now_hhmm()
     if source in (None, "realtime"):
         return f"_{_label('updated', lang)} {timestamp}_"
     return f"_{_label('scheduled', lang)}  ·  {timestamp}_"
@@ -291,8 +301,6 @@ def format_metrobus_line_info(line_code: str, line_data: dict,
                                stops: list[str],
                                stops_data: dict | None = None) -> str:
     """Format MetroBus line information with a visual stop map."""
-    from bot.services.metrobus import METROBUS_LINES as _METROBUS_LINES
-
     emoji = line_data.get("emoji", "\U0001f68d")
     name = line_data.get("name", f"Linha {line_code}")
     route = line_data.get("route", "")

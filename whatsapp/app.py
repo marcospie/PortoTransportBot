@@ -304,7 +304,11 @@ def verify_webhook():
     challenge = request.args.get("hub.challenge", "")
 
     expected = WHATSAPP_VERIFY_TOKEN or ""
-    if mode == "subscribe" and expected and hmac.compare_digest(token, expected):
+    # compare_digest on bytes: str inputs raise TypeError for non-ASCII, which a
+    # caller could trigger on purpose.
+    if mode == "subscribe" and expected and hmac.compare_digest(
+        token.encode("utf-8", "surrogatepass"), expected.encode("utf-8", "surrogatepass"),
+    ):
         logger.info("Webhook verified")
         return challenge, 200
     return "Forbidden", 403
@@ -590,8 +594,8 @@ async def _try_stop_code(sender: str, text: str, lang: str) -> bool:
     if len(text) > 6 or not any(c.isdigit() for c in text):
         return False
     stop_id = text.upper()
-    data = await stcp.get_stop_real_time(stop_id)
-    if data["arrivals"] or data["stop_name"] != stop_id:
+    data = await stcp.get_stop_real_time(stop_id) or {}
+    if data.get("arrivals") or data.get("stop_name", stop_id) != stop_id:
         await _send_bus_arrivals(sender, stop_id, data, lang)
         return True
     return False

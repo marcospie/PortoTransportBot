@@ -17,8 +17,10 @@ from bot.utils.formatting import escape_md, format_metrobus_schedule, format_met
 from bot.utils.i18n import get_lang, get_zone_display, t
 from bot.utils.telegram import (
     rows_of,
+    t_safe,
     safe_callback_button,
     safe_edit_message,
+    safe_edit_reply_markup,
     truncate_label,
 )
 
@@ -106,7 +108,8 @@ async def metrobus_lines_callback(update: Update,
     all_lines = metrobus.get_all_lines()
     lines_text = []
     for line in all_lines:
-        stop_label = "paragens" if lang == "pt" else "stops"
+        stop_label = t_safe("metrobus_stops_label", lang,
+                            pt="paragens", en="stops")
         lines_text.append(
             f"{line['emoji']} *{escape_md(line['name'])}* "
             f"\\({escape_md(str(line['stop_count']))} {stop_label}\\)\n"
@@ -175,8 +178,10 @@ async def metrobus_line_callback(update: Update,
         text = format_metrobus_line_info(line_code, line_data, stops,
                                           stops_data=STOPS)
 
-        tap_hint = "_Toca numa paragem para ver horários_" if lang == "pt" else "_Tap a stop to see schedules_"
-        text += "\n\n" + tap_hint
+        tap_hint = t_safe("metrobus_tap_stop_hint", lang,
+                          pt="Toca numa paragem para ver horários",
+                          en="Tap a stop to see schedules")
+        text += "\n\n_" + escape_md(tap_hint) + "_"
 
         await safe_edit_message(
             query, text,
@@ -287,7 +292,7 @@ async def metrobus_location_callback(update: Update,
         from bot.database import is_favorite
         user_id = query.from_user.id
         is_fav = await is_favorite(user_id, "metrobus", stop_name)
-        await query.edit_message_reply_markup(reply_markup=None)
+        await safe_edit_reply_markup(query, None)
         coords = metrobus.get_stop_coordinates(stop_name)
         if coords:
             await context.bot.send_location(

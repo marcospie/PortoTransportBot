@@ -115,6 +115,15 @@ class TestFormatMetroSchedule:
         ]
         result = format_metro_schedule("Trindade", "🔵 Linha A", deps)
         assert "Trindade" in result
+        # Timetable data (no realtime flag) must not claim to be live.
+        assert "Horário previsto" in result
+        assert "Atualizado" not in result
+
+    def test_realtime_departures_label(self):
+        deps = [
+            {"direction": "Senhor de Matosinhos", "time": "3 min", "realtime": True},
+        ]
+        result = format_metro_schedule("Trindade", "🔵 Linha A", deps)
         assert "Atualizado" in result
 
     def test_estimated_departures_label(self):
