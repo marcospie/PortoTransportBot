@@ -19,3 +19,6 @@ data/
 htmlcov/
 *.log
 .claude/
+
+# Stray API dumps from debugging
+/*.json
