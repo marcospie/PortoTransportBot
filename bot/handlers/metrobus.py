@@ -2,7 +2,7 @@
 
 import logging
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from bot.keyboards.inline import (
@@ -15,8 +15,45 @@ from bot.services import metrobus
 from bot.services.metrobus import STOPS, METROBUS_LINES
 from bot.utils.formatting import escape_md, format_metrobus_schedule, format_metrobus_line_info
 from bot.utils.i18n import get_lang, get_zone_display, t
+from bot.utils.telegram import (
+    rows_of,
+    safe_callback_button,
+    safe_edit_message,
+    truncate_label,
+)
 
 logger = logging.getLogger(__name__)
+
+#: Buttons per keyboard row for the stop list of a line.
+_STOPS_PER_ROW = 2
+
+
+def _line_stops_keyboard(stops: list[str], line_data: dict,
+                         lang: str = "pt") -> InlineKeyboardMarkup:
+    """Keyboard listing *every* stop on a line as a tappable button.
+
+    Only three stops (first, middle, last) used to be reachable, so the rest of
+    the line could not be opened from the line view at all. MetroBus lines are
+    short, so all stops fit; each callback_data is byte-checked against
+    Telegram's 64-byte limit and dropped rather than breaking the keyboard.
+
+    Built locally instead of in ``bot/keyboards/inline.py`` on purpose.
+    """
+    emoji = line_data.get("emoji", "\U0001f68d")
+
+    buttons = []
+    for name in stops:
+        button = safe_callback_button(
+            truncate_label(f"{emoji} {name}", 32),
+            f"metrobus:stop:{name}",
+        )
+        if button is not None:
+            buttons.append(button)
+
+    rows = rows_of(buttons, per_row=_STOPS_PER_ROW)
+    rows.append([InlineKeyboardButton(t("kb_back", lang),
+                                      callback_data="metrobus:lines")])
+    return InlineKeyboardMarkup(rows)
 
 
 async def metrobus_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -36,9 +73,8 @@ async def metrobus_menu_callback(update: Update,
     await query.answer()
     lang = get_lang(update)
     context.user_data.pop("metrobus_back", None)
-    await query.edit_message_text(
-        t("metrobus_title", lang),
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, t("metrobus_title", lang),
         reply_markup=metrobus_menu_keyboard(lang),
     )
 
@@ -50,9 +86,8 @@ async def metrobus_search_callback(update: Update,
     await query.answer()
     lang = get_lang(update)
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-    await query.edit_message_text(
-        t("metrobus_search_title", lang),
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, t("metrobus_search_title", lang),
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(t("metrobus_search_button", lang),
                                   switch_inline_query_current_chat="metrobus ")],
@@ -81,9 +116,8 @@ async def metrobus_lines_callback(update: Update,
     lines_joined = "\n\n".join(lines_text)
     text = t("metrobus_lines_title", lang).format(lines=lines_joined)
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, text,
         reply_markup=metrobus_lines_keyboard(lang),
     )
 
@@ -114,9 +148,8 @@ async def metrobus_freq_callback(update: Update,
         + f"\n\n{t('metro_schedule', lang)} {escape_md('06:00 - 01:00')}"
     )
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, text,
         reply_markup=metrobus_menu_keyboard(lang),
     )
 
@@ -132,9 +165,8 @@ async def metrobus_line_callback(update: Update,
     try:
         line_data = METROBUS_LINES.get(line_code)
         if not line_data:
-            await query.edit_message_text(
-                t("metrobus_line_not_found", lang),
-                parse_mode="MarkdownV2",
+            await safe_edit_message(
+                query, t("metrobus_line_not_found", lang),
                 reply_markup=metrobus_lines_keyboard(lang),
             )
             return
@@ -146,46 +178,14 @@ async def metrobus_line_callback(update: Update,
         tap_hint = "_Toca numa paragem para ver horários_" if lang == "pt" else "_Tap a stop to see schedules_"
         text += "\n\n" + tap_hint
 
-        # Build keyboard with stops
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        buttons = []
-        emoji = line_data.get("emoji", "\U0001f68d")
-        row = []
-        # Show first, last, and a few middle stops
-        key_stops = []
-        if stops:
-            key_stops.append(stops[0])
-            mid = len(stops) // 2
-            if mid > 0 and stops[mid] not in key_stops:
-                key_stops.append(stops[mid])
-            if stops[-1] not in key_stops:
-                key_stops.append(stops[-1])
-
-        for name in key_stops[:6]:
-            label = f"{emoji} {name}"
-            if len(label) > 40:
-                label = f"{emoji} {name[:32]}..."
-            cb_data = f"metrobus:stop:{name}"
-            if len(cb_data.encode("utf-8")) <= 64:
-                row.append(InlineKeyboardButton(label, callback_data=cb_data))
-            if len(row) == 2:
-                buttons.append(row)
-                row = []
-        if row:
-            buttons.append(row)
-
-        buttons.append([InlineKeyboardButton(t("kb_back", lang), callback_data="metrobus:lines")])
-
-        await query.edit_message_text(
-            text,
-            parse_mode="MarkdownV2",
-            reply_markup=InlineKeyboardMarkup(buttons),
+        await safe_edit_message(
+            query, text,
+            reply_markup=_line_stops_keyboard(stops, line_data, lang),
         )
     except Exception:
         logger.exception("Error in metrobus_line_callback for %s", line_code)
-        await query.edit_message_text(
-            t("error_load_metrobus_line", lang),
-            parse_mode="MarkdownV2",
+        await safe_edit_message(
+            query, t("error_load_metrobus_line", lang),
             reply_markup=metrobus_lines_keyboard(lang),
         )
 
@@ -227,22 +227,15 @@ async def metrobus_stop_callback(update: Update,
             text = t("metrobus_closed", lang)
 
         back_cb = context.user_data.get("metrobus_back", "menu:metrobus")
-        try:
-            await query.edit_message_text(
-                text,
-                parse_mode="MarkdownV2",
-                reply_markup=metrobus_stop_actions_keyboard(stop_name, is_fav=is_fav, lang=lang, back_callback=back_cb),
-            )
-        except Exception as edit_err:
-            if "Message is not modified" in str(edit_err):
-                pass
-            else:
-                raise
+        await safe_edit_message(
+            query, text,
+            reply_markup=metrobus_stop_actions_keyboard(
+                stop_name, is_fav=is_fav, lang=lang, back_callback=back_cb),
+        )
     except Exception:
         logger.exception("Error in metrobus_stop_callback for %s", stop_name)
-        await query.edit_message_text(
-            t("error_load_metrobus_stop", lang).format(name=escape_md(stop_name)),
-            parse_mode="MarkdownV2",
+        await safe_edit_message(
+            query, t("error_load_metrobus_stop", lang).format(name=escape_md(stop_name)),
             reply_markup=metrobus_menu_keyboard(lang),
         )
 
@@ -261,9 +254,8 @@ async def metrobus_stop_lines_callback(update: Update,
     stop_info = metrobus.get_stop_info(stop_name)
 
     if not stop_info:
-        await query.edit_message_text(
-            t("metrobus_stop_not_found", lang).format(name=escape_md(stop_name)),
-            parse_mode="MarkdownV2",
+        await safe_edit_message(
+            query, t("metrobus_stop_not_found", lang).format(name=escape_md(stop_name)),
             reply_markup=metrobus_menu_keyboard(lang),
         )
         return
@@ -277,9 +269,8 @@ async def metrobus_stop_lines_callback(update: Update,
 
     text = f"\U0001f68d *{escape_md(stop_name)}*\n\n" + "\n\n".join(lines_text)
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, text,
         reply_markup=metrobus_stop_actions_keyboard(stop_name, is_fav=is_fav, lang=lang),
     )
 

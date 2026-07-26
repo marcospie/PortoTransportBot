@@ -78,15 +78,34 @@ class TestAccessibilityService:
         result = get_station_accessibility("NonExistentStationXYZ123")
         assert result is None
 
-    def test_get_station_accessibility_maintenance(self):
-        """Test accessibility for a station with elevator under maintenance."""
-        from bot.services.accessibility import get_station_accessibility
+    def test_no_invented_maintenance_status(self):
+        """No station may claim an unsourced 'lift under maintenance' status."""
+        from bot.services.accessibility import ACCESSIBILITY, get_station_accessibility
+        # Bolhão used to be hardcoded as "under maintenance" with no source.
         result = get_station_accessibility("Bolhão")
         assert result is not None
-        assert result["elevator"] is True
-        assert result["elevator_status"] == "maintenance"
+        assert result["elevator_status"] != "maintenance"
+        assert all(d["elevator_status"] != "maintenance"
+                   for d in ACCESSIBILITY.values())
+
+    def test_every_station_carries_provenance(self):
+        """Accessibility data must state its source, date and live-ness."""
+        from bot.services.accessibility import get_station_accessibility
+        result = get_station_accessibility("Trindade")
+        assert result["data_source"]
+        assert result["data_date"]
+        assert result["live_status_available"] is False
+        assert result["verified_live"] is False
+        # The note must point users at official live information.
+        assert "metrodoporto" in result["notes_pt"].lower()
+        assert "metrodoporto" in result["notes_en"].lower()
         assert result["notes_pt"] != ""
         assert result["notes_en"] != ""
+
+    def test_has_live_elevator_status_is_false(self):
+        """There is no public live lift feed, so this must not claim one."""
+        from bot.services.accessibility import has_live_elevator_status
+        assert has_live_elevator_status() is False
 
     def test_get_accessible_stations(self):
         """Test that get_accessible_stations returns all metro stations."""
@@ -111,16 +130,14 @@ class TestAccessibilityService:
         # All results should have operational elevators
         for r in results:
             assert r["elevator_status"] == "operational"
-        # Should be total minus maintenance count
-        assert len(results) == len(STATIONS) - 5
+        # No station is claimed to be in maintenance any more.
+        assert len(results) == len(STATIONS)
 
     def test_search_accessible_features_elevator_maintenance(self):
-        """Test searching for stations with elevators under maintenance."""
+        """Without a live source, no station may be reported as out of order."""
         from bot.services.accessibility import search_accessible_features
         results = search_accessible_features("elevator_maintenance")
-        assert len(results) == 5
-        for r in results:
-            assert r["elevator_status"] == "maintenance"
+        assert results == []
 
     def test_search_accessible_features_ramp(self):
         """Test searching by ramp feature."""
@@ -129,17 +146,10 @@ class TestAccessibilityService:
         results = search_accessible_features("ramp")
         assert len(results) == len(STATIONS)
 
-    def test_elevator_maintenance_stations_exist(self):
-        """Test that maintenance stations are real metro stations."""
-        from bot.services.accessibility import ACCESSIBILITY
-        from bot.services.metro import STATIONS
-        maintenance_stations = [
-            name for name, data in ACCESSIBILITY.items()
-            if data["elevator_status"] == "maintenance"
-        ]
-        assert len(maintenance_stations) == 5
-        for name in maintenance_stations:
-            assert name in STATIONS, f"{name} is not a real metro station"
+    def test_no_hardcoded_maintenance_station_list(self):
+        """The invented _MAINTENANCE_STATIONS set must be gone."""
+        import bot.services.accessibility as mod
+        assert not hasattr(mod, "_MAINTENANCE_STATIONS")
 
     def test_all_metro_stations_have_accessibility(self):
         """Test that every metro station has accessibility data."""
@@ -253,7 +263,9 @@ class TestAccessibilityHandlers:
         await accessibility_elevators_callback(update, context)
         update.callback_query.edit_message_text.assert_called_once()
         call_args = update.callback_query.edit_message_text.call_args[0][0]
-        assert "5" in call_args  # 5 stations under maintenance
+        # Zero stations are claimed to be under maintenance now, because no
+        # live lift-status source exists.
+        assert "0" in call_args
 
     @pytest.mark.asyncio
     async def test_handle_accessibility_text_search(self):

@@ -16,12 +16,12 @@ from bot.keyboards.inline import (
     metro_station_actions_keyboard,
     metro_line_actions_keyboard,
     metro_line_detail_keyboard,
-    cancel_keyboard,
 )
 from bot.services import metro
 from bot.services.metro import STATIONS
 from bot.utils.formatting import escape_md, format_metro_schedule, format_metro_line_info
 from bot.utils.i18n import get_lang, get_zone_display, t
+from bot.utils.telegram import safe_edit_message
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +61,8 @@ async def metro_menu_callback(update: Update,
     lang = get_lang(update)
     _clear_awaiting(context)
     context.user_data.pop("metro_back", None)
-    await query.edit_message_text(
-        t("metro_title", lang),
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, t("metro_title", lang),
         reply_markup=metro_menu_keyboard(lang),
     )
 
@@ -75,9 +74,8 @@ async def metro_search_callback(update: Update,
     await query.answer()
     lang = get_lang(update)
     _clear_awaiting(context)
-    await query.edit_message_text(
-        t("metro_search_title", lang),
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, t("metro_search_title", lang),
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(t("metro_search_button", lang),
                                   switch_inline_query_current_chat="metro ")],
@@ -107,9 +105,8 @@ async def metro_lines_callback(update: Update,
     lines_joined = "\n\n".join(lines_text)
     text = t("metro_lines_title", lang).format(lines=lines_joined)
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, text,
         reply_markup=metro_lines_keyboard(lang),
     )
 
@@ -137,9 +134,8 @@ async def metro_freq_callback(update: Update,
         + f"\n\n{t('metro_schedule', lang)} {escape_md('06:00 - 01:00')}"
     )
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, text,
         reply_markup=metro_menu_keyboard(lang),
     )
 
@@ -155,9 +151,8 @@ async def metro_line_callback(update: Update,
     try:
         line_data = METRO_LINES.get(line_code)
         if not line_data:
-            await query.edit_message_text(
-                t("metro_line_not_found", lang),
-                parse_mode="MarkdownV2",
+            await safe_edit_message(
+                query, t("metro_line_not_found", lang),
                 reply_markup=metro_lines_keyboard(lang),
             )
             return
@@ -171,18 +166,16 @@ async def metro_line_callback(update: Update,
         # Remember where to go back from station detail
         context.user_data["metro_back"] = f"metro:line:{line_code}"
 
-        await query.edit_message_text(
-            text,
-            parse_mode="MarkdownV2",
+        await safe_edit_message(
+            query, text,
             reply_markup=metro_line_detail_keyboard(line_code, stations,
-                                                     stations_data=STATIONS,
-                                                     lang=lang),
+            stations_data=STATIONS,
+            lang=lang),
         )
     except Exception:
         logger.exception("Error in metro_line_callback for %s", line_code)
-        await query.edit_message_text(
-            t("error_load_metro_line", lang),
-            parse_mode="MarkdownV2",
+        await safe_edit_message(
+            query, t("error_load_metro_line", lang),
             reply_markup=metro_lines_keyboard(lang),
         )
 
@@ -206,9 +199,8 @@ async def metro_line_freq_callback(update: Update,
         f"{t('metro_schedule', lang)}\n   {escape_md(freq['hours'])}"
     )
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, text,
         reply_markup=metro_line_actions_keyboard(line_code, lang=lang),
     )
 
@@ -263,20 +255,15 @@ async def metro_station_callback(update: Update,
         text = _build_station_text(station_name, departures, lang)
 
         back_cb = context.user_data.get("metro_back", "menu:metro")
-        try:
-            await query.edit_message_text(
-                text,
-                parse_mode="MarkdownV2",
-                reply_markup=metro_station_actions_keyboard(
-                    station_name, is_fav=is_fav, lang=lang,
-                    back_callback=back_cb,
-                ),
-            )
-        except Exception as edit_err:
-            if "Message is not modified" in str(edit_err):
-                pass  # Content unchanged, ignore
-            else:
-                raise
+        # Refreshing before the next departure changes leaves the message
+        # byte-identical; the shared helper absorbs Telegram's complaint.
+        await safe_edit_message(
+            query, text,
+            reply_markup=metro_station_actions_keyboard(
+                station_name, is_fav=is_fav, lang=lang,
+                back_callback=back_cb,
+            ),
+        )
 
         # Onboarding tip for first-time users
         if not context.user_data.get("onboarded"):
@@ -290,9 +277,8 @@ async def metro_station_callback(update: Update,
             )
     except Exception:
         logger.exception("Error in metro_station_callback for %s", station_name)
-        await query.edit_message_text(
-            t("error_load_station", lang).format(name=escape_md(station_name)),
-            parse_mode="MarkdownV2",
+        await safe_edit_message(
+            query, t("error_load_station", lang).format(name=escape_md(station_name)),
             reply_markup=metro_menu_keyboard(lang),
         )
 
@@ -316,9 +302,8 @@ async def metro_station_lines_callback(update: Update,
     lines = metro.get_station_lines(station_name)
 
     if not lines:
-        await query.edit_message_text(
-            t("station_not_found", lang).format(name=escape_md(station_name)),
-            parse_mode="MarkdownV2",
+        await safe_edit_message(
+            query, t("station_not_found", lang).format(name=escape_md(station_name)),
             reply_markup=metro_menu_keyboard(lang),
         )
         return
@@ -332,9 +317,8 @@ async def metro_station_lines_callback(update: Update,
 
     text = f"🚇 *{escape_md(station_name)}*\n\n" + "\n\n".join(lines_text)
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, text,
         reply_markup=metro_station_actions_keyboard(station_name, is_fav=is_fav, lang=lang),
     )
 

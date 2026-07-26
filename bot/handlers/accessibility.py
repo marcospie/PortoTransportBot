@@ -2,9 +2,10 @@
 
 import logging
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+from bot.services import accessibility as accessibility_service
 from bot.services.accessibility import (
     get_station_accessibility,
     get_accessible_stations,
@@ -13,11 +14,22 @@ from bot.services.accessibility import (
 from bot.keyboards.inline import (
     accessibility_menu_keyboard,
     accessibility_station_keyboard,
+    cancel_keyboard,
 )
 from bot.utils.i18n import t, get_lang
 from bot.utils.formatting import escape_md
+from bot.utils.telegram import (
+    rows_of,
+    safe_callback_button,
+    safe_edit_message,
+    t_safe,
+    truncate_label,
+)
 
 logger = logging.getLogger(__name__)
+
+#: How many "did you mean?" buttons to offer when a search finds nothing.
+_MAX_SUGGESTIONS = 3
 
 
 def _status_text(value: bool, lang: str) -> str:
@@ -25,14 +37,67 @@ def _status_text(value: bool, lang: str) -> str:
     return escape_md(t("accessibility_status_ok", lang)) if value else escape_md(t("accessibility_status_out", lang))
 
 
+def _live_status_available() -> bool:
+    """Whether the service has a real, live lift-status source.
+
+    Read defensively: older revisions of the service exposed no such helper.
+    """
+    checker = getattr(accessibility_service, "has_live_elevator_status", None)
+    if callable(checker):
+        try:
+            return bool(checker())
+        except Exception:  # pragma: no cover - defensive
+            logger.debug("has_live_elevator_status() failed", exc_info=True)
+    return bool(getattr(accessibility_service,
+                        "LIVE_ELEVATOR_STATUS_AVAILABLE", True))
+
+
 def _elevator_status_text(data: dict, lang: str) -> str:
-    """Return a translated elevator status string."""
+    """Return a translated elevator status string.
+
+    When there is no live lift-status feed, the value describes the network's
+    step-free *design standard*, not a current reading — so it is labelled as
+    unverified instead of being presented as fact.
+    """
     status = data.get("elevator_status", "operational")
+    live = data.get("live_status_available")
+    if live is None:
+        live = _live_status_available()
+
+    if status == "operational" and not live:
+        return escape_md(t_safe(
+            "accessibility_status_unverified", lang,
+            pt="Existe (estado em tempo real não verificado)",
+            en="Provided (live status not verified)",
+        ))
     if status == "operational":
         return escape_md(t("accessibility_status_ok", lang))
-    elif status == "maintenance":
+    if status == "maintenance":
         return escape_md(t("accessibility_status_maintenance", lang))
     return escape_md(t("accessibility_status_out", lang))
+
+
+def _provenance_line(data: dict, lang: str, notes: str = "") -> str:
+    """A short "source · date" footer, honest about where the data came from.
+
+    Skipped when the service's own notes already name the source, so the user
+    is not told the same thing twice.
+    """
+    source = data.get("data_source") or getattr(accessibility_service, "DATA_SOURCE", "")
+    date = (data.get("data_date")
+            or getattr(accessibility_service, "DATA_SOURCE_DATE", "")
+            or getattr(accessibility_service, "DATA_DATE", ""))
+    if not source:
+        return ""
+    if notes and source in notes:
+        return ""
+
+    label = t_safe("accessibility_data_source", lang,
+                   pt="Fonte", en="Source")
+    text = f"📄 _{escape_md(label)}: {escape_md(str(source))}"
+    if date:
+        text += f" \\· {escape_md(str(date))}"
+    return text + "_"
 
 
 def _format_station_info(data: dict, lang: str) -> str:
@@ -73,7 +138,55 @@ def _format_station_info(data: dict, lang: str) -> str:
     if notes:
         text += "\n" + t("accessibility_notes", lang).format(notes=escape_md(notes))
 
+    provenance = _provenance_line(data, lang, notes)
+    if provenance:
+        text += "\n\n" + provenance
+
     return text
+
+
+def _suggestions(name: str) -> list[str]:
+    """Closest station names for a query that matched nothing exactly."""
+    from bot.utils.search import fuzzy_search
+
+    try:
+        candidates = [s["name"] for s in get_accessible_stations()]
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("Could not list stations for suggestions")
+        return []
+    matches = fuzzy_search(name, candidates, min_score=15,
+                           max_results=_MAX_SUGGESTIONS)
+    return [n for n, _score in matches]
+
+
+def _not_found_view(name: str, lang: str) -> tuple[str, InlineKeyboardMarkup]:
+    """Text + keyboard for "station not found", offering the closest matches."""
+    text = t("accessibility_not_found", lang).format(name=escape_md(name))
+
+    suggestions = _suggestions(name)
+    if not suggestions:
+        return text, accessibility_menu_keyboard(lang)
+
+    text += "\n\n" + escape_md(t_safe(
+        "accessibility_did_you_mean", lang,
+        pt="Será que queres dizer:", en="Did you mean:",
+    ))
+
+    buttons = []
+    for station in suggestions:
+        button = safe_callback_button(
+            truncate_label(f"♿ {station}", 32),
+            f"access:station:{station}",
+        )
+        if button is not None:
+            buttons.append(button)
+
+    rows = rows_of(buttons, per_row=1)
+    rows.append([InlineKeyboardButton(t("kb_accessibility_search", lang),
+                                      callback_data="access:search")])
+    rows.append([InlineKeyboardButton(t("kb_back", lang),
+                                      callback_data="menu:accessibility")])
+    return text, InlineKeyboardMarkup(rows)
 
 
 async def accessibility_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -93,11 +206,8 @@ async def accessibility_menu_callback(update: Update, context: ContextTypes.DEFA
     await query.answer()
     lang = get_lang(update)
     context.user_data.pop("accessibility_step", None)
-    await query.edit_message_text(
-        t("accessibility_title", lang),
-        parse_mode="MarkdownV2",
-        reply_markup=accessibility_menu_keyboard(lang),
-    )
+    await safe_edit_message(query, t("accessibility_title", lang),
+                            reply_markup=accessibility_menu_keyboard(lang))
 
 
 async def accessibility_station_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -111,17 +221,13 @@ async def accessibility_station_callback(update: Update, context: ContextTypes.D
     data = get_station_accessibility(station_name)
 
     if not data:
-        await query.edit_message_text(
-            t("accessibility_not_found", lang).format(name=escape_md(station_name)),
-            parse_mode="MarkdownV2",
-            reply_markup=accessibility_menu_keyboard(lang),
-        )
+        text, keyboard = _not_found_view(station_name, lang)
+        await safe_edit_message(query, text, reply_markup=keyboard)
         return
 
     text = _format_station_info(data, lang)
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, text,
         reply_markup=accessibility_station_keyboard(data["name"], lang),
     )
 
@@ -132,14 +238,17 @@ async def accessibility_search_callback(update: Update, context: ContextTypes.DE
     await query.answer()
     lang = get_lang(update)
     context.user_data["accessibility_step"] = "search"
-    await query.edit_message_text(
+    # The prompt used to have no keyboard at all, leaving the user stuck with
+    # no way back other than typing something.
+    await safe_edit_message(
+        query,
         t("accessibility_search_prompt", lang),
-        parse_mode="MarkdownV2",
+        reply_markup=cancel_keyboard("menu:accessibility", lang),
     )
 
 
 async def accessibility_elevators_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show elevator status overview."""
+    """Show what is actually known about lifts across the network."""
     query = update.callback_query
     await query.answer()
     lang = get_lang(update)
@@ -156,17 +265,41 @@ async def accessibility_elevators_callback(update: Update, context: ContextTypes
     )
 
     if maintenance:
-        text += "\n\n🔧 *" + escape_md(
-            "Elevadores em manutenção:" if lang == "pt" else "Elevators under maintenance:"
-        ) + "*\n"
+        heading = t_safe("accessibility_elevators_maintenance_heading", lang,
+                         pt="Elevadores em manutenção:",
+                         en="Elevators under maintenance:")
+        text += "\n\n🔧 *" + escape_md(heading) + "*\n"
         for station in maintenance:
             text += f"• {escape_md(station['name'])}\n"
+    elif not _live_status_available():
+        # No live feed exists: "zero lifts out of service" would be a claim we
+        # cannot support, so say what we actually know and where to check.
+        text += "\n\n" + escape_md(t_safe(
+            "accessibility_no_live_status", lang,
+            pt=("Não existe fonte pública com o estado dos elevadores em "
+                "tempo real, por isso este bot não o consegue confirmar."),
+            en=("There is no public live lift-status feed, so this bot cannot "
+                "confirm current lift availability."),
+        ))
+        note = _source_note(lang)
+        if note:
+            text += "\n\n" + note
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
-        reply_markup=accessibility_menu_keyboard(lang),
-    )
+    await safe_edit_message(query, text,
+                            reply_markup=accessibility_menu_keyboard(lang))
+
+
+def _source_note(lang: str) -> str:
+    """The service's own provenance note, escaped, when it exposes one."""
+    getter = getattr(accessibility_service, "get_data_source_note", None)
+    if not callable(getter):
+        return ""
+    try:
+        note = getter(lang)
+    except Exception:  # pragma: no cover - defensive
+        logger.debug("get_data_source_note() failed", exc_info=True)
+        return ""
+    return f"📄 _{escape_md(note)}_" if note else ""
 
 
 async def handle_accessibility_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -183,10 +316,11 @@ async def handle_accessibility_text_input(update: Update, context: ContextTypes.
         data = get_station_accessibility(text)
 
         if not data:
+            msg, keyboard = _not_found_view(text, lang)
             await update.message.reply_text(
-                t("accessibility_not_found", lang).format(name=escape_md(text)),
+                msg,
                 parse_mode="MarkdownV2",
-                reply_markup=accessibility_menu_keyboard(lang),
+                reply_markup=keyboard,
             )
             return True
 

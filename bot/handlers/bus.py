@@ -61,9 +61,8 @@ async def bus_menu_callback(update: Update,
     _clear_awaiting(context)
     context.user_data.pop("bus_routes", None)
     context.user_data.pop("bus_back", None)
-    await query.edit_message_text(
-        t("bus_title", lang),
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, t("bus_title", lang),
         reply_markup=bus_menu_keyboard(lang),
     )
 
@@ -75,9 +74,8 @@ async def bus_find_callback(update: Update,
     await query.answer()
     lang = get_lang(update)
     _clear_awaiting(context)
-    await query.edit_message_text(
-        t("bus_find_title", lang),
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, t("bus_find_title", lang),
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(t("bus_find_button", lang),
                                   switch_inline_query_current_chat="bus ")],
@@ -100,9 +98,8 @@ async def bus_code_callback(update: Update,
     await query.answer()
     lang = get_lang(update)
     _clear_awaiting(context)
-    await query.edit_message_text(
-        t("bus_code_title", lang),
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, t("bus_code_title", lang),
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(t("bus_code_button", lang),
                                   switch_inline_query_current_chat="bus ")],
@@ -120,9 +117,8 @@ async def bus_routes_callback(update: Update,
 
     routes = await stcp.get_routes()
     if not routes:
-        await query.edit_message_text(
-            t("error_load_lines", lang),
-            parse_mode="MarkdownV2",
+        await safe_edit_message(
+            query, t("error_load_lines", lang),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(t("retry", lang), callback_data="bus:routes")],
                 [InlineKeyboardButton(t("kb_back", lang), callback_data="menu:bus")],
@@ -132,9 +128,8 @@ async def bus_routes_callback(update: Update,
 
     # Store routes in user_data for pagination
     context.user_data["bus_routes"] = routes
-    await query.edit_message_text(
-        t("bus_lines_title", lang).format(count=escape_md(str(len(routes)))),
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, t("bus_lines_title", lang).format(count=escape_md(str(len(routes)))),
         reply_markup=bus_routes_keyboard(routes, page=0, lang=lang),
     )
 
@@ -152,9 +147,8 @@ async def bus_routes_page_callback(update: Update,
         routes = await stcp.get_routes()
         context.user_data["bus_routes"] = routes
 
-    await query.edit_message_text(
-        t("bus_lines_title", lang).format(count=escape_md(str(len(routes)))),
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, t("bus_lines_title", lang).format(count=escape_md(str(len(routes)))),
         reply_markup=bus_routes_keyboard(routes, page=page, lang=lang),
     )
 
@@ -176,9 +170,8 @@ async def bus_stop_callback(update: Update,
         )
         back_cb = context.user_data.get("bus_back", "menu:bus")
         try:
-            await query.edit_message_text(
-                text,
-                parse_mode="MarkdownV2",
+            await safe_edit_message(
+                query, text,
                 reply_markup=bus_stop_actions_keyboard(stop_id, is_fav=is_fav, lang=lang, back_callback=back_cb),
             )
         except Exception as edit_err:
@@ -199,9 +192,8 @@ async def bus_stop_callback(update: Update,
             )
     except Exception:
         logger.exception("Error in bus_stop_callback for %s", stop_id)
-        await query.edit_message_text(
-            t("error_load_stop", lang).format(stop_id=escape_md(stop_id)),
-            parse_mode="MarkdownV2",
+        await safe_edit_message(
+            query, t("error_load_stop", lang).format(stop_id=escape_md(stop_id)),
             reply_markup=bus_menu_keyboard(lang),
         )
 
@@ -224,17 +216,16 @@ async def bus_stop_info_callback(update: Update,
     if info.get("zone"):
         zone_display = get_zone_display(info['zone'])
         lines.append(t("zone_info", lang).format(zone=escape_md(zone_display)))
-    if info.get("lat") and info.get("lon"):
-        lines.append(f"🗺 Coordenadas: {info['lat']}, {info['lon']}")
+    # Raw latitude/longitude was printed here as hardcoded Portuguese noise.
+    # The keyboard already has a Map button, which is what a user can act on.
 
     if info["routes"]:
         lines.append(t("bus_routes_serving", lang))
         for route in info["routes"]:
             lines.append(f"  • *{escape_md(route['number'])}* \\- {escape_md(route['name'])}")
 
-    await query.edit_message_text(
-        "\n".join(lines),
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, "\n".join(lines),
         reply_markup=bus_stop_actions_keyboard(stop_id, is_fav=is_fav, lang=lang),
     )
 
@@ -252,9 +243,8 @@ async def bus_route_callback(update: Update,
         stops = await stcp.get_route_stops(route_num, direction=0)
 
         if not stops:
-            await query.edit_message_text(
-                t("error_load_line", lang).format(route=escape_md(route_num)),
-                parse_mode="MarkdownV2",
+            await safe_edit_message(
+                query, t("error_load_line", lang).format(route=escape_md(route_num)),
                 reply_markup=bus_menu_keyboard(lang),
             )
             return
@@ -287,18 +277,16 @@ async def bus_route_callback(update: Update,
             lines.append(f"🔴 {escape_md(stops[-1]['name'])} \\(`{escape_md(stops[-1]['stop_id'])}`\\)")
             text = "\n".join(lines)
 
-        await query.edit_message_text(
-            text,
-            parse_mode="MarkdownV2",
+        await safe_edit_message(
+            query, text,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(t("kb_back", lang), callback_data="bus:routes")],
+            [InlineKeyboardButton(t("kb_back", lang), callback_data="bus:routes")],
             ]),
         )
     except Exception:
         logger.exception("Error in bus_route_callback for %s", route_num)
-        await query.edit_message_text(
-            t("error_load_line2", lang).format(route=escape_md(route_num)),
-            parse_mode="MarkdownV2",
+        await safe_edit_message(
+            query, t("error_load_line2", lang).format(route=escape_md(route_num)),
             reply_markup=bus_menu_keyboard(lang),
         )
 

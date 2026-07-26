@@ -20,6 +20,7 @@ from bot.services.events import (
 )
 from bot.utils.formatting import escape_md
 from bot.utils.i18n import get_lang, t
+from bot.utils.telegram import safe_edit_message
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +50,9 @@ async def events_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     lang = get_lang(update)
     text, keyboard = _build_today_view(lang)
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
-        reply_markup=keyboard,
-    )
+    # Re-tapping the events button must not surface Telegram's
+    # "Message is not modified" as an internal error.
+    await safe_edit_message(query, text, reply_markup=keyboard)
 
 
 async def events_categories_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -61,11 +60,8 @@ async def events_categories_callback(update: Update, context: ContextTypes.DEFAU
     query = update.callback_query
     await query.answer()
     lang = get_lang(update)
-    await query.edit_message_text(
-        t("events_title", lang),
-        parse_mode="MarkdownV2",
-        reply_markup=events_menu_keyboard(lang),
-    )
+    await safe_edit_message(query, t("events_title", lang),
+                            reply_markup=events_menu_keyboard(lang))
 
 
 async def events_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -90,19 +86,15 @@ async def events_category_callback(update: Update, context: ContextTypes.DEFAULT
             return
 
     if not events_list:
-        await query.edit_message_text(
-            t("events_no_events", lang),
-            parse_mode="MarkdownV2",
-            reply_markup=events_menu_keyboard(lang),
-        )
+        await safe_edit_message(query, t("events_no_events", lang),
+                                reply_markup=events_menu_keyboard(lang))
         return
 
     title = cat_info["name_pt"] if lang == "pt" else cat_info["name_en"]
     emoji = cat_info["emoji"]
     text = t("events_overview", lang).format(emoji=emoji, title=escape_md(title))
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, text,
         reply_markup=events_category_keyboard(events_list, lang),
     )
 
@@ -140,9 +132,8 @@ async def events_detail_callback(update: Update, context: ContextTypes.DEFAULT_T
     )
     text += t("events_transport_tip", lang).format(tip=escape_md(tip))
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query, text,
         reply_markup=events_detail_keyboard(event_index, event.category, lang),
     )
 

@@ -6,11 +6,35 @@ from telegram import KeyboardButton, MenuButtonCommands, ReplyKeyboardMarkup, Up
 from telegram.ext import ContextTypes
 
 from bot.database import get_favorites
-from bot.keyboards.inline import main_menu_keyboard, favorites_keyboard, onboarding_keyboard
+from bot.keyboards.inline import (
+    main_menu_keyboard,
+    favorites_keyboard,
+    onboarding_keyboard,
+    favorite_emoji,
+)
 from bot.utils.formatting import escape_md
 from bot.utils.i18n import get_lang, t
 
 logger = logging.getLogger(__name__)
+
+#: Fallback wording for keys not yet present in bot.utils.i18n.
+_FALLBACKS = {
+    "pt": {
+        "start_keyboard_hint": "⌨️ Usa os botões abaixo para acesso rápido\\.",
+    },
+    "en": {
+        "start_keyboard_hint": "⌨️ Use the buttons below for quick access\\.",
+    },
+}
+
+
+def _t(key: str, lang: str = "pt") -> str:
+    """Translate ``key``, falling back to this module's own wording."""
+    value = t(key, lang)
+    if value != key:
+        return value
+    table = _FALLBACKS.get(lang) or _FALLBACKS["pt"]
+    return table.get(key, _FALLBACKS["pt"].get(key, key))
 
 
 def _reply_keyboard(lang: str = "pt") -> ReplyKeyboardMarkup:
@@ -25,6 +49,29 @@ def _reply_keyboard(lang: str = "pt") -> ReplyKeyboardMarkup:
         ],
         resize_keyboard=True,
     )
+
+
+async def _ensure_reply_keyboard(update: Update,
+                                 context: ContextTypes.DEFAULT_TYPE,
+                                 lang: str) -> None:
+    """Send the persistent "Near me" keyboard if this chat hasn't got it.
+
+    A reply keyboard and an inline keyboard cannot share one message, and the
+    /start replies all carry inline keyboards -- so the persistent keyboard
+    goes out on its own short message first.  Without it, prompts such as
+    "tap the Near me button on the keyboard below" point at nothing.
+    """
+    try:
+        if context.user_data.get("reply_keyboard_sent"):
+            return
+        await update.message.reply_text(
+            _t("start_keyboard_hint", lang),
+            parse_mode="MarkdownV2",
+            reply_markup=_reply_keyboard(lang),
+        )
+        context.user_data["reply_keyboard_sent"] = True
+    except Exception:
+        logger.exception("Could not send the persistent reply keyboard")
 
 
 def _clear_awaiting(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -47,6 +94,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
     except Exception:
         pass
+
+    # Install the persistent keyboard before anything else, so it is present
+    # whatever path the rest of this handler takes (including deep links).
+    await _ensure_reply_keyboard(update, context, lang)
 
     # --- Deep link support ---
     if context.args:
@@ -80,10 +131,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # Returning user with favorites
         fav_lines = [t("welcome_with_favs", lang)]
         for fav in favs[:5]:
+            # Emoji per transport mode — a train favorite must not show 🚇.
+            emoji = favorite_emoji(fav.get("type", "metro"))
+            name = escape_md(fav.get("name", fav["id"]))
             if fav["type"] == "bus":
-                fav_lines.append(f"  🚌 {escape_md(fav.get('name', fav['id']))} \\(`{escape_md(fav['id'])}`\\)")
+                fav_lines.append(f"  {emoji} {name} \\(`{escape_md(fav['id'])}`\\)")
             else:
-                fav_lines.append(f"  🚇 {escape_md(fav.get('name', fav['id']))}")
+                fav_lines.append(f"  {emoji} {name}")
         text = "\n".join(fav_lines)
         await update.message.reply_text(
             text,

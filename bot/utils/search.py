@@ -1,11 +1,20 @@
 """Smart text matching for stop/station search.
 
-Handles accents, abbreviations, and fuzzy matching so users can type
-"d joao 2" and find "D. João II".
+Handles accents, abbreviations, English/tourist aliases and typos so users can
+type "d joao 2" and find "D. João II", or "Trinidade" and still find
+"Trindade".
+
+Typo tolerance uses the standard library's :class:`difflib.SequenceMatcher`
+rather than ``rapidfuzz``: it is good enough for short station names and adds
+no third-party dependency (the bot has to install cleanly on Railway from
+``requirements.txt``). It is applied strictly as a *secondary* signal — only
+when the exact/token/abbreviation matching below found nothing at all — so no
+query that already resolved keeps a different score than before.
 """
 
 import unicodedata
 import re
+from difflib import SequenceMatcher
 
 # Common abbreviations in Porto transport names
 _ABBREVIATIONS = {
@@ -20,7 +29,56 @@ _ABBREVIATIONS = {
     "pr.": "praça",
     "lg.": "largo",
     "univ.": "universidade universitário",
+    # Very common in the wild and previously missing
+    "est.": "estacao",
+    "hosp.": "hospital",
+    "aerop.": "aeroporto",
+    "pq.": "parque",
 }
+
+# English / tourist phrasings mapped onto the Portuguese wording actually used
+# in the station and stop names. Keys are accent-free lowercase; multi-word
+# keys are applied before single-word ones.
+_QUERY_ALIASES = {
+    "airport": "aeroporto",
+    "oporto": "porto",
+    "dragon stadium": "estadio do dragao",
+    "dragons stadium": "estadio do dragao",
+    "dragon": "dragao",
+    "stadium": "estadio",
+    "house of music": "casa da musica",
+    "music house": "casa da musica",
+    "concert hall": "casa da musica",
+    "city center": "aliados",
+    "city centre": "aliados",
+    "downtown": "aliados",
+    "town hall": "aliados",
+    "city hall": "aliados",
+    "university": "universitario",
+    "campus": "universitario",
+    "beach": "praia",
+    "garden": "jardim",
+    "market": "mercado",
+    "bridge": "ponte",
+    "hospital of": "hospital de",
+    "saint": "sao",
+}
+
+# Generic words tourists append that carry no distinguishing information
+# ("São Bento station", "Trindade metro stop"). Dropped from the query when
+# something else remains to match on.
+_QUERY_STOPWORDS = {
+    "station", "stations", "stop", "stops", "metro", "subway",
+    "underground", "tube", "line", "platform",
+}
+
+_ALIAS_PHRASES = sorted(_QUERY_ALIASES, key=lambda p: (-len(p.split()), -len(p)))
+
+# Typo tolerance: a query has to be at least this similar to a name (or to one
+# of its words) before it counts as a misspelling rather than a different word.
+_FUZZY_MIN_RATIO = 0.82
+_FUZZY_MIN_LEN = 4
+_FUZZY_MAX_SCORE = 70.0
 
 # Roman numeral to arabic mapping
 _ROMAN_TO_ARABIC = {
@@ -100,15 +158,110 @@ def _strip_accents(text: str) -> str:
     return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
-def match_score(query: str, name: str) -> float:
+def expand_query_aliases(query: str) -> str:
+    """Rewrite English/tourist phrasings into the Portuguese station wording.
+
+    Only applied to the *query* — the names come from the operators and are
+    always Portuguese.
+
+    Examples:
+        >>> expand_query_aliases("airport")
+        'aeroporto'
+        >>> expand_query_aliases("São Bento station")
+        'sao bento'
+        >>> expand_query_aliases("dragon stadium")
+        'estadio do dragao'
+    """
+    text = _strip_accents(query.strip().lower())
+    if not text:
+        return ""
+
+    for phrase in _ALIAS_PHRASES:
+        if phrase in text:
+            text = re.sub(rf"(?<!\w){re.escape(phrase)}(?!\w)",
+                          _QUERY_ALIASES[phrase], text)
+
+    tokens = text.split()
+    kept = [tok for tok in tokens if tok.strip(".") not in _QUERY_STOPWORDS]
+    # Never let the stopword filter empty the query ("station" on its own).
+    return " ".join(kept or tokens)
+
+
+def _ratio(a: str, b: str) -> float:
+    """Similarity of two short strings, cheaply rejecting hopeless pairs."""
+    matcher = SequenceMatcher(None, a, b)
+    if matcher.real_quick_ratio() < _FUZZY_MIN_RATIO:
+        return 0.0
+    if matcher.quick_ratio() < _FUZZY_MIN_RATIO:
+        return 0.0
+    return matcher.ratio()
+
+
+def typo_score(query: str, name: str) -> float:
+    """Score ``query`` as a possible *misspelling* of ``name``.
+
+    Returns 0 unless the query is close enough to be a typo rather than a
+    different word, so junk queries never resolve to a station. This is a
+    secondary signal: :func:`match_score` only consults it when exact, token
+    and abbreviation matching all scored zero.
+
+    Examples:
+        >>> typo_score("Trinidade", "Trindade") > 0
+        True
+        >>> typo_score("xyzqwerty123", "Trindade")
+        0.0
+    """
+    q = normalize_simple(expand_query_aliases(query))
+    n = normalize_simple(name)
+    if len(q) < _FUZZY_MIN_LEN or len(n) < _FUZZY_MIN_LEN:
+        return 0.0
+
+    best = _ratio(q, n)
+
+    # A single misspelt word inside a longer name ("hosp. sao jaoo").
+    q_tokens = [tok for tok in q.split() if len(tok) >= _FUZZY_MIN_LEN]
+    n_tokens = [tok for tok in n.split() if len(tok) >= _FUZZY_MIN_LEN]
+    if q_tokens and n_tokens:
+        matched = 0
+        total = 0.0
+        for qt in q_tokens:
+            token_best = 0.0
+            for nt in n_tokens:
+                if abs(len(qt) - len(nt)) > 2:
+                    continue
+                token_best = max(token_best, _ratio(qt, nt))
+            if token_best >= _FUZZY_MIN_RATIO:
+                matched += 1
+                total += token_best
+        if matched:
+            # Scale by how much of the query the typo match actually explains,
+            # so one lucky word out of four does not look like a hit.
+            coverage = matched / len(q.split())
+            best = max(best, (total / matched) * coverage)
+
+    if best < _FUZZY_MIN_RATIO:
+        return 0.0
+    return min(_FUZZY_MAX_SCORE, 100.0 * best - 25.0)
+
+
+def match_score(query: str, name: str, fuzzy: bool = True) -> float:
     """Score how well a query matches a name. Higher is better, 0 = no match.
 
     Scoring:
         - Exact match (normalized): 100
         - All query tokens found in name: 60-90 (based on coverage)
         - Partial token matches: 20-50
+        - Typo of the name (secondary signal, only when nothing else
+          matched): 57-70
         - No match: 0
+
+    Args:
+        query: What the user typed. English/tourist aliases ("airport",
+            "dragon stadium", "São Bento station") are resolved first.
+        name: The official stop/station name.
+        fuzzy: Set to False to disable typo tolerance entirely.
     """
+    query = expand_query_aliases(query) or query
     norm_query = normalize(query)
     norm_name = normalize(name)
 
@@ -168,7 +321,10 @@ def match_score(query: str, name: str) -> float:
         matched += best
 
     if matched == 0:
-        return 0
+        # Nothing matched literally — the only remaining possibility is that
+        # the user misspelled the name. Deliberately last, so this can never
+        # change the score of a query that already resolved.
+        return typo_score(query, name) if fuzzy else 0
 
     ratio = matched / len(orig_query_tokens)
 

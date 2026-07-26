@@ -7,6 +7,7 @@ Otherwise, falls back to the existing JSON file storage.
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -50,7 +51,14 @@ CREATE TABLE IF NOT EXISTS user_settings (
     language        VARCHAR(10) NOT NULL DEFAULT 'auto',
     daily_digest    BOOLEAN NOT NULL DEFAULT FALSE,
     digest_time     TIME NOT NULL DEFAULT '07:30',
-    digest_days     VARCHAR(50) NOT NULL DEFAULT 'weekdays'
+    digest_days     VARCHAR(50) NOT NULL DEFAULT 'weekdays',
+    notifications   VARCHAR(10) NOT NULL DEFAULT 'off'
+);
+
+CREATE TABLE IF NOT EXISTS commuter_profiles (
+    user_id      BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    profile_data JSONB,
+    updated_at   TIMESTAMP NOT NULL DEFAULT now()
 );
 """
 
@@ -60,6 +68,7 @@ _MIGRATIONS_SQL = [
     "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS bus_radius_m INTEGER NOT NULL DEFAULT 200",
     "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS max_results INTEGER NOT NULL DEFAULT 5",
     "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS language VARCHAR(10) NOT NULL DEFAULT 'auto'",
+    "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS notifications VARCHAR(10) NOT NULL DEFAULT 'off'",
 ]
 
 # ===================================================================
@@ -69,14 +78,64 @@ from bot.config import DATA_DIR  # noqa: E402
 
 _FAVORITES_DIR = DATA_DIR / "favorites"
 _SETTINGS_DIR = DATA_DIR / "settings"
+_USERS_DIR = DATA_DIR / "users"
 
-# Default settings values
+# Default settings values.
+# NOTE: ``notifications`` is intentionally opt-in ('off') - proactive pushes must
+# never be enabled without the user explicitly asking for them.
 DEFAULT_SETTINGS = {
     "metro_radius_m": 500,
     "bus_radius_m": 200,
     "max_results": 5,
     "language": "auto",
+    "notifications": "off",
 }
+
+# ---------------------------------------------------------------------------
+# SQL-injection guard for the settings column names
+# ---------------------------------------------------------------------------
+# ``update_user_setting`` and ``get_user_settings`` have to interpolate a COLUMN
+# NAME into the SQL text (Postgres does not allow parameter placeholders for
+# identifiers).  The *only* thing that makes that safe is that the identifier is
+# never taken from the caller: it is looked up in this hard-coded map, and the
+# lookup fails closed with ValueError for anything unknown.  If you add a new
+# setting, add it here AND to _SCHEMA_SQL/_MIGRATIONS_SQL - never build the
+# column name from user input, and never interpolate ``key`` directly.
+_SETTINGS_COLUMNS: dict[str, str] = {
+    "metro_radius_m": "metro_radius_m",
+    "bus_radius_m": "bus_radius_m",
+    "max_results": "max_results",
+    "language": "language",
+    "notifications": "notifications",
+}
+
+# A bare, lowercase SQL identifier - anything else must never reach the SQL text.
+_SAFE_IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+# Fail loudly at import time rather than at runtime if the two structures drift
+# apart or if somebody adds a column name that is not a plain identifier.
+assert set(_SETTINGS_COLUMNS) == set(DEFAULT_SETTINGS), (
+    "_SETTINGS_COLUMNS and DEFAULT_SETTINGS must describe the same keys"
+)
+assert all(_SAFE_IDENTIFIER_RE.match(c) for c in _SETTINGS_COLUMNS.values()), (
+    "settings column names must be plain lowercase SQL identifiers"
+)
+
+# Pre-rendered, allowlist-derived column list for SELECTs (see comment above).
+_SETTINGS_SELECT_COLUMNS = ", ".join(_SETTINGS_COLUMNS[k] for k in DEFAULT_SETTINGS)
+
+
+def _settings_column(key: str) -> str:
+    """Return the validated physical column name for a settings *key*.
+
+    Raises ``ValueError`` for any key that is not in the ``DEFAULT_SETTINGS``
+    allowlist.  This is the single choke point that keeps the identifier
+    interpolation in the SQL below injection-proof.
+    """
+    column = _SETTINGS_COLUMNS.get(key)
+    if column is None or not _SAFE_IDENTIFIER_RE.match(column):
+        raise ValueError(f"Unknown setting: {key}")
+    return column
 
 
 def _json_favorites_path(user_id: int) -> Path:
@@ -103,16 +162,41 @@ def _json_save_favorites(user_id: int, favorites: list[dict]) -> None:
 # Pool lifecycle
 # ===================================================================
 
+_NO_DATABASE_URL_WARNING = (
+    "\n"
+    "==============================================================================\n"
+    " DATABASE_URL is NOT set - falling back to JSON files under %s\n"
+    "\n"
+    " *** THIS STORAGE IS NOT PERSISTENT ON RAILWAY / HEROKU / PLAIN DOCKER ***\n"
+    " Container filesystems are ephemeral: every redeploy, restart or crash WIPES\n"
+    " all user favorites, settings and commuter profiles.\n"
+    "\n"
+    " To keep user data, add a PostgreSQL database and set DATABASE_URL, e.g.\n"
+    "   DATABASE_URL=postgresql://user:password@host:5432/dbname\n"
+    " On Railway: New -> Database -> Add PostgreSQL, then reference its\n"
+    " DATABASE_URL variable from the bot service.\n"
+    " If you must stay on JSON storage, mount a persistent volume at %s.\n"
+    " See README.md ('Persistencia de dados') for the full instructions.\n"
+    "=============================================================================="
+)
+
+
+def _warn_no_database_url() -> None:
+    """Log a loud (but non-fatal) warning about ephemeral JSON storage."""
+    logger.warning(_NO_DATABASE_URL_WARNING, DATA_DIR, DATA_DIR)
+
+
 async def init_db() -> None:
     """Create the connection pool and ensure schema exists.
 
-    If DATABASE_URL is not set the function silently enables JSON fallback.
+    If DATABASE_URL is not set the function falls back to JSON files and logs a
+    prominent warning, because that storage is lost on every container restart.
     """
     global _pool, _use_db
 
     database_url = os.getenv("DATABASE_URL", "")
     if not database_url:
-        logger.info("DATABASE_URL not set - using JSON file fallback for storage")
+        _warn_no_database_url()
         _use_db = False
         return
 
@@ -149,10 +233,36 @@ async def close_db() -> None:
 # User helpers
 # ===================================================================
 
+def _json_user_path(user_id: int) -> Path:
+    _USERS_DIR.mkdir(parents=True, exist_ok=True)
+    return _USERS_DIR / f"{user_id}.json"
+
+
+def _json_load_user(user_id: int) -> Optional[dict]:
+    path = _json_user_path(user_id)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _json_save_user(user_id: int, data: dict) -> None:
+    path = _json_user_path(user_id)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+
 async def get_or_create_user(user_id: int, language: str = "pt"):
     """Return the user row, creating it if it does not exist."""
     if not _use_db:
-        return {"id": user_id, "language": language, "onboarded": False}
+        stored = _json_load_user(user_id) or {}
+        return {
+            "id": user_id,
+            "language": stored.get("language", language),
+            "onboarded": bool(stored.get("onboarded", False)),
+        }
 
     async with _pool.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
@@ -168,6 +278,14 @@ async def get_or_create_user(user_id: int, language: str = "pt"):
 async def set_user_onboarded(user_id: int) -> None:
     """Mark the user as having completed onboarding."""
     if not _use_db:
+        # Persist in the JSON fallback too, otherwise onboarding state is lost on
+        # every process start and returning users are onboarded over and over.
+        stored = _json_load_user(user_id) or {"id": user_id}
+        stored["onboarded"] = True
+        try:
+            _json_save_user(user_id, stored)
+        except OSError:
+            logger.warning("Could not persist onboarding state for user %s", user_id)
         return
 
     async with _pool.acquire() as conn:
@@ -180,7 +298,8 @@ async def set_user_onboarded(user_id: int) -> None:
 async def is_user_onboarded(user_id: int) -> bool:
     """Check whether a user has completed onboarding."""
     if not _use_db:
-        return False
+        stored = _json_load_user(user_id) or {}
+        return bool(stored.get("onboarded", False))
 
     async with _pool.acquire() as conn:
         row = await conn.fetchval(
@@ -190,9 +309,16 @@ async def is_user_onboarded(user_id: int) -> bool:
 
 
 async def get_user(user_id: int):
-    """Return user row or None."""
+    """Return user row or None (None when the user has never been stored)."""
     if not _use_db:
-        return None
+        stored = _json_load_user(user_id)
+        if stored is None:
+            return None
+        return {
+            "id": user_id,
+            "language": stored.get("language", "pt"),
+            "onboarded": bool(stored.get("onboarded", False)),
+        }
 
     async with _pool.acquire() as conn:
         return await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
@@ -318,25 +444,30 @@ async def get_user_settings(user_id: int) -> dict:
 
     await get_or_create_user(user_id)
     async with _pool.acquire() as conn:
+        # The column list is built from the _SETTINGS_COLUMNS allowlist, never
+        # from caller input - see the comment next to _SETTINGS_COLUMNS.
         row = await conn.fetchrow(
-            "SELECT metro_radius_m, bus_radius_m, max_results, language "
-            "FROM user_settings WHERE user_id = $1",
+            f"SELECT {_SETTINGS_SELECT_COLUMNS} FROM user_settings WHERE user_id = $1",
             user_id,
         )
         if row is None:
             return dict(DEFAULT_SETTINGS)
-        return {
-            "metro_radius_m": row["metro_radius_m"],
-            "bus_radius_m": row["bus_radius_m"],
-            "max_results": row["max_results"],
-            "language": row["language"],
-        }
+        # Start from the defaults so the returned dict always has exactly the same
+        # keys as the JSON fallback path (parity), even for NULL/missing columns.
+        result = dict(DEFAULT_SETTINGS)
+        for key, column in _SETTINGS_COLUMNS.items():
+            value = row[column]
+            if value is not None:
+                result[key] = value
+        return result
 
 
 async def update_user_setting(user_id: int, key: str, value) -> None:
     """Update a single setting for a user."""
-    if key not in DEFAULT_SETTINGS:
-        raise ValueError(f"Unknown setting: {key}")
+    # Validate + translate the key into a physical column name.  Raises
+    # ValueError for unknown keys, which is what keeps the identifier
+    # interpolation below safe from SQL injection.
+    column = _settings_column(key)
 
     if not _use_db:
         settings = _json_load_settings(user_id)
@@ -346,13 +477,15 @@ async def update_user_setting(user_id: int, key: str, value) -> None:
 
     await get_or_create_user(user_id)
     async with _pool.acquire() as conn:
-        # Upsert the settings row
+        # Upsert the settings row.  Only `column` is interpolated and it can only
+        # ever be one of the hard-coded _SETTINGS_COLUMNS values; `value` is
+        # always passed as a bound parameter.
         await conn.execute(
             f"""
-            INSERT INTO user_settings (user_id, {key})
+            INSERT INTO user_settings (user_id, {column})
             VALUES ($1, $2)
             ON CONFLICT (user_id)
-            DO UPDATE SET {key} = $2
+            DO UPDATE SET {column} = $2
             """,
             user_id, value,
         )

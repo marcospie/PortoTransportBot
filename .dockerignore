@@ -1,0 +1,69 @@
+# Keep the image small and free of secrets/local state.
+# Anything listed here is NOT sent to the Docker build context, so `COPY . .`
+# in the Dockerfile no longer ships .git/, tests/ or the local data/ directory.
+
+# Version control
+.git
+.gitignore
+.gitattributes
+.github
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local runtime data. The image creates an empty /app/data itself; shipping the
+# developer's favorites/settings/GTFS cache would both bloat the image and leak
+# local user data into it.
+data/
+
+# Tests and test artifacts (not needed at runtime)
+tests/
+pytest.ini
+requirements-dev.txt
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Deployment descriptors for other platforms (not used inside the image)
+docker-compose.yml
+docker-compose.*.yml
+Procfile
+railway.toml
+runtime.txt
+
+# Docs
+README.md
+README.en.md
+whatsapp/README.md
+*.md
+
+# Editor / tooling
+.idea/
+.vscode/
+.DS_Store
+.claude/
+
+# Misc
+*.log
+*.zip

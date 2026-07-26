@@ -3,5 +3,33 @@ builder = "dockerfile"
 
 [deploy]
 startCommand = "python run.py"
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 10
+
+# ALWAYS, not ON_FAILURE.
+# The previous `on_failure` + `restartPolicyMaxRetries = 10` combination meant the
+# bot stayed DOWN permanently once it had crashed 10 times - a long Telegram API
+# or network outage was enough to exhaust the budget, after which nothing brought
+# it back until somebody redeployed by hand. With ALWAYS, Railway keeps
+# restarting it (with backoff) and `restartPolicyMaxRetries` no longer applies.
+restartPolicyType = "ALWAYS"
+
+# ---------------------------------------------------------------------------
+# PERSISTENCE - READ THIS
+# ---------------------------------------------------------------------------
+# Railway containers have an EPHEMERAL filesystem. Without one of the two options
+# below, every redeploy/restart WIPES all user favorites, settings and commuter
+# profiles (bot/database.py falls back to JSON files under /app/data).
+#
+# Option 1 (recommended) - PostgreSQL:
+#   Railway dashboard -> New -> Database -> Add PostgreSQL, then in the bot
+#   service's Variables add:  DATABASE_URL = ${{Postgres.DATABASE_URL}}
+#   bot/database.py picks it up automatically and creates its own schema.
+#
+# Option 2 - persistent volume for the JSON fallback:
+#   Volumes CANNOT be declared in railway.toml (the config-as-code schema has no
+#   volume key - only build/deploy settings). Attach one in the dashboard:
+#   service -> Settings -> Volumes -> Add Volume, mount path /app/data
+#   The image runs as UID 10001; Railway volumes are writable by the container
+#   user, but PostgreSQL is still the safer option.
+#
+# See README.md ("Persistencia de dados") for step-by-step instructions and how
+# to verify that persistence actually works.

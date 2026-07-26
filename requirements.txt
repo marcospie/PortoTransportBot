@@ -1,11 +1,43 @@
-python-telegram-bot==21.10
+# All dependencies are pinned to exact versions so builds are reproducible.
+
+# Telegram bot framework.
+# 22.x is a major bump from 21.10. Verified against this codebase: none of the
+# things v22.0 removed are used anywhere in bot/ or whatsapp/ - no filters.CHAT,
+# no filters.StatusUpdate.USER_SHARED, no Defaults(disable_web_page_preview=/quote=),
+# no *_proxy_url, no *_timeout arguments to run_polling(), no Passport types and
+# no media-sending calls affected by the write_timeout default change.
+python-telegram-bot==22.8
+
+# STCP real-time arrivals API client.
 stcp-api==2.0.3
-aiohttp==3.11.11
+
+# Async HTTP client used by every service in bot/services/.
+# 3.14.3 is the first release patched against GHSA-cq5v-8q36-5273 (high severity:
+# out-of-bounds heap read in the C HTTP *response* parser, leading to DoS) - which
+# applies here because the bot parses responses from third-party endpoints. It also
+# includes the 3.12.x/3.13.x request-smuggling and HTTP parser hardening fixes that
+# landed after 3.11.11.
+aiohttp==3.14.3
+
 python-dotenv==1.0.1
 aiofiles==24.1.0
+
+# PostgreSQL driver used by bot/database.py when DATABASE_URL is set.
+# Without a DATABASE_URL the bot falls back to JSON files, which are LOST on every
+# container restart - see README.md ("Persistencia de dados").
 asyncpg==0.30.0
-flask>=3.0.0
-requests>=2.31.0
+
+# --- WhatsApp service (whatsapp/app.py) -----------------------------------
+# flask and requests used to be unpinned (">="), which made builds
+# non-reproducible; they are now pinned like everything else.
+flask==3.1.3
+requests==2.34.2
+
+# WSGI server for the WhatsApp service, used by the Procfile "web:" process and by
+# the whatsapp service in docker-compose.yml. Flask's built-in development server
+# is single-threaded and must not be used in production.
+gunicorn==26.0.0
+
 # Station data is now fetched via aiohttp from Metro do Porto JS files.
 # Playwright/Chromium is no longer needed (the trip planner uses a
 # referrer-restricted Google Maps API key that cannot be called server-side,

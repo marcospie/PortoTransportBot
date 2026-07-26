@@ -1,19 +1,50 @@
 services:
+  # Telegram bot (long polling). No HTTP port - the image's own HEALTHCHECK
+  # covers it (package import + data dir writability).
   bot:
     build: .
     restart: unless-stopped
     env_file:
       - .env
     volumes:
+      # Only needed when DATABASE_URL is unset (JSON fallback storage) or for the
+      # GTFS cache. Prefer setting DATABASE_URL to a PostgreSQL instance.
+      # The container runs as UID 10001, so run once on the host:
+      #   sudo chown -R 10001:10001 ./data
       - ./data:/app/data
 
+  # WhatsApp bot (Flask app behind gunicorn, exposes /webhook and /health).
   whatsapp:
     build: .
-    command: python -m whatsapp.app
+    # gunicorn rather than Flask's development server, which is single-threaded
+    # and explicitly not for production. Matches the `web:` entry in the Procfile.
+    command: >
+      gunicorn --bind 0.0.0.0:${WHATSAPP_PORT:-8080}
+      --workers 2 --threads 4 --timeout 120
+      --access-logfile - --error-logfile -
+      whatsapp.app:app
     ports:
-      - "8080:8080"
+      - "${WHATSAPP_PORT:-8080}:${WHATSAPP_PORT:-8080}"
     env_file:
       - .env
-    restart: on-failure
+    # Was `on-failure`: that does NOT restart the container after a clean exit
+    # (e.g. gunicorn's master shutting itself down) and gives up once the retry
+    # budget is spent. `unless-stopped` matches the bot service.
+    restart: unless-stopped
     volumes:
       - ./data:/app/data
+    # Overrides the image HEALTHCHECK with a real HTTP probe of the /health
+    # endpoint in whatsapp/app.py. Uses python, already present in the image, so
+    # no curl/wget needs to be installed.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os,sys,urllib.request; p=os.getenv('WHATSAPP_PORT','8080'); r=urllib.request.urlopen('http://127.0.0.1:'+p+'/health', timeout=5); sys.exit(0 if r.status==200 else 1)",
+        ]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3

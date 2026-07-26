@@ -1,18 +1,100 @@
 from datetime import datetime
 
+# Footer / status wording.  This module renders raw strings rather than going
+# through bot.utils.i18n (no translation keys exist for these), so the two
+# languages are kept side by side here.
+_LABELS = {
+    "pt": {
+        "no_arrivals": ("Sem autocarros previstos na próxima hora\\.\n"
+                        "Tenta atualizar daqui a pouco\\."),
+        "data_unavailable": (
+            "⚠️ *Dados STCP temporariamente indisponíveis*\n\n"
+            "Não foi possível obter os tempos de espera desta paragem\\.\n"
+            "Isto não significa que não haja autocarros — tenta novamente "
+            "dentro de um minuto\\."
+        ),
+        "stop_not_found": (
+            "⚠️ *Paragem não encontrada*\n\n"
+            "O código desta paragem não existe nos dados da STCP\\."
+        ),
+        "no_schedule": "Sem informação de horários disponível\\.",
+        "updated": "Atualizado às",
+        "estimate": "Estimativa",
+        "scheduled": "Horário previsto",
+    },
+    "en": {
+        "no_arrivals": ("No buses expected in the next hour\\.\n"
+                        "Try refreshing in a moment\\."),
+        "data_unavailable": (
+            "⚠️ *STCP data temporarily unavailable*\n\n"
+            "The waiting times for this stop could not be retrieved\\.\n"
+            "This does not mean there are no buses — please try again in "
+            "a minute\\."
+        ),
+        "stop_not_found": (
+            "⚠️ *Stop not found*\n\n"
+            "This stop code does not exist in the STCP data\\."
+        ),
+        "no_schedule": "No schedule information available\\.",
+        "updated": "Updated at",
+        "estimate": "Estimate",
+        "scheduled": "Scheduled",
+    },
+}
 
-def format_bus_arrivals(stop_code: str, stop_name: str, arrivals: list[dict]) -> str:
-    """Format bus arrival data into a compact Telegram message."""
+
+def _label(key: str, lang: str = "pt") -> str:
+    return _LABELS.get(lang, _LABELS["pt"]).get(key, _LABELS["pt"][key])
+
+
+def _timestamp_footer(departures: list[dict], lang: str = "pt") -> str:
+    """Build a footer whose wording matches what the data actually is.
+
+    Real-time data gets "Atualizado às", frequency-based guesses get
+    "Estimativa", and plain timetable data gets "Horário previsto" — so the
+    message never implies live tracking when none happened.
+    """
+    timestamp = escape_md(datetime.now().strftime("%H:%M"))
+    if any(d.get("estimated") for d in departures):
+        return f"_{_label('estimate', lang)}  ·  {timestamp}_"
+    if any(d.get("realtime") for d in departures):
+        return f"_{_label('updated', lang)} {timestamp}_"
+    return f"_{_label('scheduled', lang)}  ·  {timestamp}_"
+
+
+def format_bus_arrivals(stop_code: str, stop_name: str, arrivals: list[dict],
+                        error: bool | None = None, source: str | None = None,
+                        lang: str = "pt") -> str:
+    """Format bus arrival data into a compact Telegram message.
+
+    Args:
+        stop_code: Stop code shown next to the name.
+        stop_name: Human-readable stop name.
+        arrivals: Arrival dicts. May be an ``stcp.ArrivalsList``, in which case
+            its ``error``/``source`` metadata is picked up automatically.
+        error: Force the "data source unavailable" rendering. When ``None``
+            (the default) it is read from the ``arrivals`` metadata, so callers
+            that only forward ``data["arrivals"]`` still get honest output.
+        source: Optional data-source marker (``"unavailable"``, ``"not_found"``,
+            ``"realtime"`` ...). Defaults to the ``arrivals`` metadata.
+        lang: ``"pt"`` or ``"en"``.
+    """
     header = f"🚏 *{escape_md(stop_name)}*  `{stop_code}`"
     separator = "━━━━━━━━━━━━━━━━"
 
+    if error is None:
+        error = bool(getattr(arrivals, "error", False))
+    if source is None:
+        source = getattr(arrivals, "source", None)
+
+    if error:
+        # The data source failed. Never claim there are no buses.
+        body = (_label("stop_not_found", lang) if source == "not_found"
+                else _label("data_unavailable", lang))
+        return f"{header}\n{separator}\n\n{body}"
+
     if not arrivals:
-        return (
-            f"{header}\n"
-            f"{separator}\n\n"
-            "Sem autocarros previstos na próxima hora\\.\n"
-            "Tenta atualizar daqui a pouco\\."
-        )
+        return f"{header}\n{separator}\n\n{_label('no_arrivals', lang)}"
 
     # Split arrivals into urgent (< 5 min) and others
     urgent = []
@@ -29,26 +111,29 @@ def format_bus_arrivals(stop_code: str, stop_name: str, arrivals: list[dict]) ->
     has_both_groups = bool(urgent) and bool(regular)
 
     if has_both_groups:
-        lines.append("⏳ *A chegar:*")
-    if urgent or not has_both_groups:
-        for a in (urgent if has_both_groups else arrivals[:0]):
+        lines.append("⏳ *A chegar:*" if lang == "pt" else "⏳ *Arriving:*")
+        for a in urgent:
             lines.append(_format_bus_arrival_line(a))
-        if has_both_groups:
-            lines.append("")
-
-    if has_both_groups:
-        lines.append("🕐 *Seguintes:*")
+        lines.append("")
+        lines.append("🕐 *Seguintes:*" if lang == "pt" else "🕐 *Later:*")
         for a in regular:
             lines.append(_format_bus_arrival_line(a))
     else:
-        # No split needed — just list them all
+        # Only one group is populated — just list them all, in order.
         for a in arrivals:
             lines.append(_format_bus_arrival_line(a))
 
-    timestamp = escape_md(datetime.now().strftime("%H:%M"))
     lines.append("")
-    lines.append(f"_Atualizado às {timestamp}_")
+    lines.append(_bus_footer(arrivals, source, lang))
     return "\n".join(lines)
+
+
+def _bus_footer(arrivals: list[dict], source: str | None, lang: str) -> str:
+    """Footer for bus arrivals, reflecting whether data is live or scheduled."""
+    timestamp = escape_md(datetime.now().strftime("%H:%M"))
+    if source in (None, "realtime"):
+        return f"_{_label('updated', lang)} {timestamp}_"
+    return f"_{_label('scheduled', lang)}  ·  {timestamp}_"
 
 
 def _format_bus_arrival_line(arrival: dict) -> str:
@@ -72,7 +157,7 @@ def _format_bus_arrival_line(arrival: dict) -> str:
 
 
 def format_metro_schedule(station_name: str, line_info: str,
-                          departures: list[dict]) -> str:
+                          departures: list[dict], lang: str = "pt") -> str:
     """Format metro departure data into a compact Telegram message."""
     header = f"🚇 *{escape_md(station_name)}*"
     separator = "━━━━━━━━━━━━━━━━"
@@ -82,11 +167,8 @@ def format_metro_schedule(station_name: str, line_info: str,
             f"{header}\n"
             f"{line_info}\n"
             f"{separator}\n\n"
-            "Sem informação de horários disponível\\."
+            f"{_label('no_schedule', lang)}"
         )
-
-    # Check if departures are estimated
-    is_estimated = any(d.get("estimated") for d in departures)
 
     lines = [header]
     if line_info:
@@ -100,12 +182,8 @@ def format_metro_schedule(station_name: str, line_info: str,
         # Metro times often start with ~ for estimates; keep that inside backticks
         lines.append(f"*{direction}*  —  `{escape_md(time_str)}`")
 
-    timestamp = escape_md(datetime.now().strftime("%H:%M"))
     lines.append("")
-    if is_estimated:
-        lines.append(f"_Estimativa  ·  {timestamp}_")
-    else:
-        lines.append(f"_Atualizado às {timestamp}_")
+    lines.append(_timestamp_footer(departures, lang))
 
     return "\n".join(lines)
 
@@ -179,7 +257,7 @@ def format_metro_line_info(line_code: str, line_data: dict,
 
 
 def format_metrobus_schedule(stop_name: str, line_info: str,
-                             departures: list[dict]) -> str:
+                             departures: list[dict], lang: str = "pt") -> str:
     """Format MetroBus departure data into a compact Telegram message."""
     header = f"\U0001f68d *{escape_md(stop_name)}*"
     separator = "━━━━━━━━━━━━━━━━"
@@ -189,10 +267,8 @@ def format_metrobus_schedule(stop_name: str, line_info: str,
             f"{header}\n"
             f"{line_info}\n"
             f"{separator}\n\n"
-            "Sem informação de horários disponível\\."
+            f"{_label('no_schedule', lang)}"
         )
-
-    is_estimated = any(d.get("estimated") for d in departures)
 
     lines = [header]
     if line_info:
@@ -205,12 +281,8 @@ def format_metrobus_schedule(stop_name: str, line_info: str,
         time_str = dep.get("time", "?")
         lines.append(f"*{direction}*  —  `{escape_md(time_str)}`")
 
-    timestamp = escape_md(datetime.now().strftime("%H:%M"))
     lines.append("")
-    if is_estimated:
-        lines.append(f"_Estimativa  ·  {timestamp}_")
-    else:
-        lines.append(f"_Atualizado às {timestamp}_")
+    lines.append(_timestamp_footer(departures, lang))
 
     return "\n".join(lines)
 

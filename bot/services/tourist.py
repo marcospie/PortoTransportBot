@@ -2,7 +2,29 @@
 
 Curated transport information for popular tourist destinations,
 including metro lines, bus alternatives, zones, and practical tips.
+
+Every price shown here comes from :mod:`bot.services.fares`, and every "zone"
+below is the Andante *title* you need to buy starting from central Porto
+(``PRT1``), computed with :mod:`bot.services.zones` rather than typed in by
+hand.  That is why the zone calculator and this guide can no longer disagree.
 """
+
+from bot.services import fares
+from bot.services.zones import calculate_zones
+
+
+def _title_from_porto_centre(station: str, fallback: str = "Z2") -> str:
+    """Andante title needed to reach ``station`` from central Porto.
+
+    Falls back to ``fallback`` for places we have no station entry for (e.g.
+    destinations reached only by city bus, which stay inside PRT1/PRT2 and are
+    therefore Z2 anyway).
+    """
+    result = calculate_zones("Trindade", station)
+    if result and result.get("title"):
+        return result["title"]
+    return fallback
+
 
 TOURIST_POIS = {
     "beaches": {
@@ -18,7 +40,7 @@ TOURIST_POIS = {
                 "line": "A",
                 "line_name": "Linha Azul",
                 "bus_alt": "500, 502",
-                "zone": "Z4",
+                "zone": _title_from_porto_centre("Matosinhos Sul"),
                 "walk_min": 5,
                 "tip_pt": "Sai na estação Matosinhos Sul, 5 min a pé até à praia. Zona com ótimos restaurantes de peixe fresco.",
                 "tip_en": "Exit at Matosinhos Sul, 5 min walk to the beach. Area has great fresh fish restaurants.",
@@ -31,7 +53,7 @@ TOURIST_POIS = {
                 "line": "500",
                 "line_name": "Bus 500",
                 "bus_alt": "500, 203",
-                "zone": "Z2",
+                "zone": _title_from_porto_centre("Foz (via autocarro)", "Z2"),
                 "walk_min": 3,
                 "tip_pt": "Apanha o autocarro 500 desde a Praça da Liberdade. Percurso panorâmico junto ao rio Douro.",
                 "tip_en": "Take bus 500 from Praça da Liberdade. Scenic route along the Douro river.",
@@ -51,7 +73,7 @@ TOURIST_POIS = {
                 "line": "D",
                 "line_name": "Linha Amarela",
                 "bus_alt": "900, 901, 906",
-                "zone": "Z3",
+                "zone": _title_from_porto_centre("Jardim do Morro"),
                 "walk_min": 10,
                 "tip_pt": "Sai em Jardim do Morro e desce a pé até ao cais. Vista espetacular da Ponte D. Luís I.",
                 "tip_en": "Exit at Jardim do Morro and walk down to the waterfront. Spectacular view of D. Luís I Bridge.",
@@ -64,7 +86,7 @@ TOURIST_POIS = {
                 "line": "D",
                 "line_name": "Linha Amarela",
                 "bus_alt": "900, 901",
-                "zone": "Z3",
+                "zone": _title_from_porto_centre("General Torres"),
                 "walk_min": 5,
                 "tip_pt": "Estação mais próxima do centro das caves. Podes visitar Taylor's, Graham's e Sandeman.",
                 "tip_en": "Closest station to the main cellars area. You can visit Taylor's, Graham's and Sandeman.",
@@ -84,7 +106,7 @@ TOURIST_POIS = {
                 "line": "D",
                 "line_name": "Linha Amarela",
                 "bus_alt": "1, 500, 900",
-                "zone": "Z2",
+                "zone": _title_from_porto_centre("São Bento"),
                 "walk_min": 10,
                 "tip_pt": "Do São Bento, desce pela Rua das Flores até à Ribeira. Património UNESCO.",
                 "tip_en": "From São Bento, walk down Rua das Flores to Ribeira. UNESCO World Heritage site.",
@@ -97,7 +119,7 @@ TOURIST_POIS = {
                 "line": "D",
                 "line_name": "Linha Amarela",
                 "bus_alt": "200, 201, 207",
-                "zone": "Z2",
+                "zone": _title_from_porto_centre("Aliados"),
                 "walk_min": 5,
                 "tip_pt": "Sai nos Aliados e caminha até à Torre. Sobe os 240 degraus para uma vista panorâmica.",
                 "tip_en": "Exit at Aliados and walk to the Tower. Climb 240 steps for a panoramic view.",
@@ -110,7 +132,7 @@ TOURIST_POIS = {
                 "line": "D",
                 "line_name": "Linha Amarela",
                 "bus_alt": "1, 200, 900",
-                "zone": "Z2",
+                "zone": _title_from_porto_centre("São Bento"),
                 "walk_min": 0,
                 "tip_pt": "A estação de metro é dentro da própria estação histórica. Não percas os azulejos!",
                 "tip_en": "The metro station is inside the historic train station itself. Don't miss the tile panels!",
@@ -130,10 +152,20 @@ TOURIST_POIS = {
                 "line": "E",
                 "line_name": "Linha Violeta",
                 "bus_alt": "601, 602, 604",
-                "zone": "Z4",
+                "zone": _title_from_porto_centre("Aeroporto"),
                 "walk_min": 0,
-                "tip_pt": "Metro direto, ~35 min desde Trindade. Frequência: 20-30 min. Compra bilhete Z4 (€2.00 + Andante €0.60).",
-                "tip_en": "Direct metro, ~35 min from Trindade. Frequency: 20-30 min. Buy Z4 ticket (€2.00 + Andante €0.60).",
+                "tip_pt": (
+                    "Metro direto, ~35 min desde Trindade. Frequência: 20-30 min. "
+                    f"Compra bilhete {_title_from_porto_centre('Aeroporto')} "
+                    f"({fares.format_price(fares.get_price(4))} "
+                    f"+ cartão Andante {fares.format_price(fares.CARD_PRICE_BLUE)})."
+                ),
+                "tip_en": (
+                    "Direct metro, ~35 min from Trindade. Frequency: 20-30 min. "
+                    f"Buy a {_title_from_porto_centre('Aeroporto')} ticket "
+                    f"({fares.format_price(fares.get_price(4))} "
+                    f"+ Andante card {fares.format_price(fares.CARD_PRICE_BLUE)})."
+                ),
             },
         ],
     },
@@ -150,7 +182,7 @@ TOURIST_POIS = {
                 "line": "A",
                 "line_name": "Linha Azul",
                 "bus_alt": "300, 305, 400, 401",
-                "zone": "Z2",
+                "zone": _title_from_porto_centre("Estádio do Dragão"),
                 "walk_min": 2,
                 "tip_pt": "Estação dedicada ao estádio nas linhas A, B e E. Em dias de jogo, há metro extra.",
                 "tip_en": "Dedicated station on lines A, B and E. Extra metro service on match days.",
@@ -170,7 +202,7 @@ TOURIST_POIS = {
                 "line": "D",
                 "line_name": "Linha Amarela",
                 "bus_alt": "204, 300, 301",
-                "zone": "Z2",
+                "zone": _title_from_porto_centre("Polo Universitário"),
                 "walk_min": 3,
                 "tip_pt": "Estação Polo Universitário serve diretamente o campus principal da UP.",
                 "tip_en": "Polo Universitário station directly serves the main UP campus.",
@@ -183,7 +215,7 @@ TOURIST_POIS = {
                 "line": "204, 300",
                 "line_name": "Bus 204 / 300",
                 "bus_alt": "204, 300, 301, 305",
-                "zone": "Z2",
+                "zone": _title_from_porto_centre("FEUP (via autocarro)", "Z2"),
                 "walk_min": 5,
                 "tip_pt": "Autocarros 204 ou 300 desde a Trindade. Metro mais próximo: Polo Universitário (15 min a pé).",
                 "tip_en": "Buses 204 or 300 from Trindade. Nearest metro: Polo Universitário (15 min walk).",
@@ -196,7 +228,7 @@ TOURIST_POIS = {
                 "line": "204, 300",
                 "line_name": "Bus 204 / 300",
                 "bus_alt": "204, 300, 305",
-                "zone": "Z2",
+                "zone": _title_from_porto_centre("ISEP (via autocarro)", "Z2"),
                 "walk_min": 5,
                 "tip_pt": "Fica perto do FEUP. Autocarros 204 ou 300 são a melhor opção.",
                 "tip_en": "Near FEUP. Buses 204 or 300 are the best option.",
@@ -216,7 +248,7 @@ TOURIST_POIS = {
                 "line": "D",
                 "line_name": "Linha Amarela",
                 "bus_alt": "204, 300, 301",
-                "zone": "Z2",
+                "zone": _title_from_porto_centre("Hospital de São João"),
                 "walk_min": 2,
                 "tip_pt": "Estação de metro dedicada. Linha D desde a Trindade (~12 min).",
                 "tip_en": "Dedicated metro station. Line D from Trindade (~12 min).",
@@ -229,7 +261,7 @@ TOURIST_POIS = {
                 "line": "D",
                 "line_name": "Linha Amarela",
                 "bus_alt": "200, 201, 207, 501",
-                "zone": "Z2",
+                "zone": _title_from_porto_centre("Aliados"),
                 "walk_min": 8,
                 "tip_pt": "Metro até Aliados, depois 8 min a pé. Ou autocarro 200/201 até ao Hospital.",
                 "tip_en": "Metro to Aliados, then 8 min walk. Or bus 200/201 to the Hospital.",
@@ -242,7 +274,7 @@ TOURIST_POIS = {
                 "line": "D",
                 "line_name": "Linha Amarela",
                 "bus_alt": "204, 300",
-                "zone": "Z2",
+                "zone": _title_from_porto_centre("IPO"),
                 "walk_min": 2,
                 "tip_pt": "Estação de metro IPO na linha D. Muito perto do hospital.",
                 "tip_en": "IPO metro station on line D. Very close to the hospital.",

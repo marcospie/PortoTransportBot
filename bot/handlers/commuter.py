@@ -3,7 +3,13 @@
 import logging
 import re
 
-from telegram import Update
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+)
 from telegram.ext import ContextTypes
 
 from bot.database import (
@@ -17,12 +23,23 @@ from bot.keyboards.inline import (
     commuter_quick_actions_keyboard,
     commuter_mode_keyboard,
 )
+from bot.handlers.routes import tf, format_trip_option, plain
+from bot.services.trip_planner import (
+    is_valid_porto_coords,
+    plan_trip_from_coords_async,
+    resolve_location as resolve_transport_location,
+    resolve_location_any,
+)
 from bot.utils.i18n import t, get_lang
 from bot.utils.formatting import escape_md
+from bot.utils.telegram import safe_edit_message
 
 logger = logging.getLogger(__name__)
 
 _TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+
+# Steps of the setup wizard that accept a shared location.
+_LOCATION_STEPS = ("home", "work")
 
 # Mode labels for display
 _MODE_LABELS = {
@@ -38,48 +55,90 @@ def _mode_label(mode: str, lang: str) -> str:
 
 
 def _resolve_location(query: str) -> dict | None:
-    """Try to resolve a location name to coordinates.
+    """Resolve a location name to coordinates across *all* transport modes.
 
-    Searches metro stations first, then bus stops (sync search only).
-    Returns dict with name/lat/lon or None.
+    The previous implementation substring-matched metro station names only, and
+    its bus fallback blindly took the first search hit with ``lat``/``lon``
+    defaulting to ``0.0`` — which silently wrote a broken profile.  This now
+    goes through the trip planner's resolver (metro + CP + MetroBus) and only
+    returns coordinates that pass validation.
     """
-    from bot.services.metro import STATIONS
+    if not query or not query.strip():
+        return None
 
-    # Try metro stations
-    query_lower = query.lower()
-    for name, data in STATIONS.items():
-        if query_lower in name.lower():
-            return {
-                "name": name,
-                "lat": data["lat"],
-                "lon": data["lon"],
-            }
-
-    return None
+    result = resolve_transport_location(query)
+    if not result:
+        return None
+    if not is_valid_porto_coords(result.get("lat"), result.get("lon")):
+        logger.warning("Refusing location %r with invalid coordinates %r/%r",
+                       result.get("name"), result.get("lat"), result.get("lon"))
+        return None
+    return {
+        "name": result["name"],
+        "lat": float(result["lat"]),
+        "lon": float(result["lon"]),
+    }
 
 
 async def _resolve_location_async(query: str) -> dict | None:
-    """Try to resolve a location, including async bus stop search."""
-    # First try sync metro search
+    """Resolve a location, including STCP bus stops (async lookup)."""
     result = _resolve_location(query)
     if result:
         return result
 
-    # Try bus stops
     try:
-        from bot.services.stcp import search_stops
-        stops = await search_stops(query)
-        if stops:
-            stop = stops[0]
-            return {
-                "name": stop.get("name", query),
-                "lat": stop.get("lat", 0.0),
-                "lon": stop.get("lon", 0.0),
-            }
+        found = await resolve_location_any(query)
     except Exception:
-        pass
+        logger.debug("Async location resolution failed for %r", query, exc_info=True)
+        return None
 
-    return None
+    if not found:
+        return None
+    if not is_valid_porto_coords(found.get("lat"), found.get("lon")):
+        logger.warning("Refusing STCP location %r with invalid coordinates",
+                       found.get("name"))
+        return None
+    return {
+        "name": found["name"],
+        "lat": float(found["lat"]),
+        "lon": float(found["lon"]),
+    }
+
+
+def _setup_reply_keyboard(lang: str) -> ReplyKeyboardMarkup:
+    """One-time keyboard letting the user share a location during setup."""
+    return ReplyKeyboardMarkup(
+        [[KeyboardButton(tf("commuter_share_location_button", lang),
+                         request_location=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+def _profile_text(profile: dict | None, lang: str) -> str:
+    if profile:
+        mode_label = _mode_label(profile.get("preferred_mode", "any"), lang)
+        return t("commuter_title", lang) + "\n\n" + t("commuter_profile_summary", lang).format(
+            home=escape_md(profile.get("home_name", "?")),
+            work=escape_md(profile.get("work_name", "?")),
+            mode=escape_md(mode_label),
+            departure=escape_md(profile.get("usual_departure_time", "08:00")),
+            return_time=escape_md(profile.get("usual_return_time", "18:00")),
+        )
+    return t("commuter_title", lang) + "\n\n" + t("commuter_no_profile", lang)
+
+
+def profile_coords(profile: dict) -> tuple[float, float, float, float] | None:
+    """Return (home_lat, home_lon, work_lat, work_lon) when all are valid."""
+    home_lat = profile.get("home_lat")
+    home_lon = profile.get("home_lon")
+    work_lat = profile.get("work_lat")
+    work_lon = profile.get("work_lon")
+    if not is_valid_porto_coords(home_lat, home_lon):
+        return None
+    if not is_valid_porto_coords(work_lat, work_lon):
+        return None
+    return float(home_lat), float(home_lon), float(work_lat), float(work_lon)
 
 
 # ===================================================================
@@ -92,20 +151,8 @@ async def commuter_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     lang = get_lang(update)
     profile = await get_commuter_profile(user_id)
 
-    if profile:
-        mode_label = _mode_label(profile.get("preferred_mode", "any"), lang)
-        text = t("commuter_title", lang) + "\n\n" + t("commuter_profile_summary", lang).format(
-            home=escape_md(profile.get("home_name", "?")),
-            work=escape_md(profile.get("work_name", "?")),
-            mode=escape_md(mode_label),
-            departure=escape_md(profile.get("usual_departure_time", "08:00")),
-            return_time=escape_md(profile.get("usual_return_time", "18:00")),
-        )
-    else:
-        text = t("commuter_title", lang) + "\n\n" + t("commuter_no_profile", lang)
-
     await update.message.reply_text(
-        text,
+        _profile_text(profile, lang),
         parse_mode="MarkdownV2",
         reply_markup=commuter_menu_keyboard(profile is not None, lang),
     )
@@ -123,21 +170,9 @@ async def commuter_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
     lang = get_lang(update)
     profile = await get_commuter_profile(user_id)
 
-    if profile:
-        mode_label = _mode_label(profile.get("preferred_mode", "any"), lang)
-        text = t("commuter_title", lang) + "\n\n" + t("commuter_profile_summary", lang).format(
-            home=escape_md(profile.get("home_name", "?")),
-            work=escape_md(profile.get("work_name", "?")),
-            mode=escape_md(mode_label),
-            departure=escape_md(profile.get("usual_departure_time", "08:00")),
-            return_time=escape_md(profile.get("usual_return_time", "18:00")),
-        )
-    else:
-        text = t("commuter_title", lang) + "\n\n" + t("commuter_no_profile", lang)
-
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query,
+        _profile_text(profile, lang),
         reply_markup=commuter_menu_keyboard(profile is not None, lang),
     )
 
@@ -152,11 +187,22 @@ async def commuter_setup_callback(update: Update, context: ContextTypes.DEFAULT_
     context.user_data["commuter_setup"] = {}
     context.user_data["commuter_step"] = "home"
 
-    await query.edit_message_text(
-        t("commuter_ask_home", lang),
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query,
+        t("commuter_ask_home", lang) + "\n\n" + tf("commuter_location_hint", lang),
         reply_markup=commuter_setup_keyboard("home", lang),
     )
+
+    # Offer a real "share location" button — arbitrary addresses cannot be
+    # resolved by name, but a shared pin always works.
+    try:
+        await query.message.reply_text(
+            tf("commuter_location_hint", lang),
+            parse_mode="MarkdownV2",
+            reply_markup=_setup_reply_keyboard(lang),
+        )
+    except Exception:
+        logger.debug("Could not attach the setup location keyboard", exc_info=True)
 
 
 async def commuter_mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -168,13 +214,14 @@ async def commuter_mode_callback(update: Update, context: ContextTypes.DEFAULT_T
     mode = query.data.split(":")[-1]  # commuter:mode:<mode>
     setup = context.user_data.get("commuter_setup", {})
     setup["preferred_mode"] = mode
+    context.user_data["commuter_setup"] = setup
 
     # Move to departure time step
     context.user_data["commuter_step"] = "departure"
 
-    await query.edit_message_text(
+    await safe_edit_message(
+        query,
         t("commuter_ask_departure", lang),
-        parse_mode="MarkdownV2",
         reply_markup=commuter_setup_keyboard("departure", lang),
     )
 
@@ -191,21 +238,9 @@ async def commuter_cancel_callback(update: Update, context: ContextTypes.DEFAULT
     user_id = update.effective_user.id
     profile = await get_commuter_profile(user_id)
 
-    if profile:
-        mode_label = _mode_label(profile.get("preferred_mode", "any"), lang)
-        text = t("commuter_title", lang) + "\n\n" + t("commuter_profile_summary", lang).format(
-            home=escape_md(profile.get("home_name", "?")),
-            work=escape_md(profile.get("work_name", "?")),
-            mode=escape_md(mode_label),
-            departure=escape_md(profile.get("usual_departure_time", "08:00")),
-            return_time=escape_md(profile.get("usual_return_time", "18:00")),
-        )
-    else:
-        text = t("commuter_title", lang) + "\n\n" + t("commuter_no_profile", lang)
-
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query,
+        _profile_text(profile, lang),
         reply_markup=commuter_menu_keyboard(profile is not None, lang),
     )
 
@@ -217,18 +252,35 @@ async def commuter_delete_callback(update: Update, context: ContextTypes.DEFAULT
     lang = get_lang(update)
 
     await delete_commuter_profile(user_id)
-    await query.answer(t("commuter_deleted", lang))
+    await query.answer(plain(t("commuter_deleted", lang)))
 
-    text = t("commuter_title", lang) + "\n\n" + t("commuter_no_profile", lang)
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
+    await safe_edit_message(
+        query,
+        _profile_text(None, lang),
         reply_markup=commuter_menu_keyboard(False, lang),
     )
 
 
-async def commuter_go_work_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show route from home to work."""
+def _commuter_results_keyboard(options: list, lang: str) -> InlineKeyboardMarkup:
+    """Trip option buttons plus a way back into the commuter menu."""
+    buttons: list[list[InlineKeyboardButton]] = []
+    for i, opt in enumerate(options[:5]):
+        label = t("trip_option_btn", lang).format(n=i + 1, time=opt.total_time_min)
+        if opt.transfers > 0:
+            label += f" | 🔄{opt.transfers}"
+        buttons.append([InlineKeyboardButton(label, callback_data=f"trip:detail:{i}")])
+    buttons.append([InlineKeyboardButton(t("commuter_go_work", lang),
+                                        callback_data="commuter:go_work")])
+    buttons.append([InlineKeyboardButton(t("commuter_go_home", lang),
+                                        callback_data="commuter:go_home")])
+    buttons.append([InlineKeyboardButton(t("back", lang),
+                                        callback_data="menu:commuter")])
+    return InlineKeyboardMarkup(buttons)
+
+
+async def _show_commute_route(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                              to_work: bool) -> None:
+    """Plan and render the real route between home and work."""
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
@@ -236,55 +288,75 @@ async def commuter_go_work_callback(update: Update, context: ContextTypes.DEFAUL
 
     profile = await get_commuter_profile(user_id)
     if not profile:
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             t("commuter_no_profile", lang),
-            parse_mode="MarkdownV2",
             reply_markup=commuter_menu_keyboard(False, lang),
         )
         return
 
     mode_label = _mode_label(profile.get("preferred_mode", "any"), lang)
-    text = t("commuter_route_to_work", lang).format(
+    header_key = "commuter_route_to_work" if to_work else "commuter_route_to_home"
+    header = t(header_key, lang).format(
         home=escape_md(profile.get("home_name", "?")),
         work=escape_md(profile.get("work_name", "?")),
         mode=escape_md(mode_label),
     )
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
-        reply_markup=commuter_quick_actions_keyboard(lang),
+    coords = profile_coords(profile)
+    if coords is None:
+        # A profile written by the old, unvalidated setup flow.
+        await safe_edit_message(
+            query,
+            header + "\n\n" + tf("commuter_profile_incomplete", lang),
+            reply_markup=commuter_quick_actions_keyboard(lang),
+        )
+        return
+
+    home_lat, home_lon, work_lat, work_lon = coords
+    if to_work:
+        o_lat, o_lon, d_lat, d_lon = home_lat, home_lon, work_lat, work_lon
+    else:
+        o_lat, o_lon, d_lat, d_lon = work_lat, work_lon, home_lat, home_lon
+
+    try:
+        options = await plan_trip_from_coords_async(o_lat, o_lon, d_lat, d_lon)
+    except Exception:
+        logger.exception("Commuter trip planning failed")
+        options = []
+
+    if not options:
+        await safe_edit_message(
+            query,
+            header + "\n\n" + t("trip_no_routes", lang),
+            reply_markup=commuter_quick_actions_keyboard(lang),
+        )
+        return
+
+    context.user_data["trip_options"] = options
+
+    parts = [header, "━━━━━━━━━━━━━━━━\n"]
+    for i, opt in enumerate(options[:3], 1):
+        parts.append(format_trip_option(opt, i, lang))
+        parts.append("")
+
+    text = "\n".join(parts)
+    if len(text) > 4000:
+        text = text[:3990] + "\\.\\.\\."
+
+    await safe_edit_message(
+        query, text, reply_markup=_commuter_results_keyboard(options, lang),
     )
+
+
+async def commuter_go_work_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show the real route from home to work."""
+    await _show_commute_route(update, context, to_work=True)
 
 
 async def commuter_go_home_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show route from work to home."""
-    query = update.callback_query
-    await query.answer()
-    user_id = update.effective_user.id
-    lang = get_lang(update)
-
-    profile = await get_commuter_profile(user_id)
-    if not profile:
-        await query.edit_message_text(
-            t("commuter_no_profile", lang),
-            parse_mode="MarkdownV2",
-            reply_markup=commuter_menu_keyboard(False, lang),
-        )
-        return
-
-    mode_label = _mode_label(profile.get("preferred_mode", "any"), lang)
-    text = t("commuter_route_to_home", lang).format(
-        home=escape_md(profile.get("home_name", "?")),
-        work=escape_md(profile.get("work_name", "?")),
-        mode=escape_md(mode_label),
-    )
-
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
-        reply_markup=commuter_quick_actions_keyboard(lang),
-    )
+    """Show the real route from work to home."""
+    await _show_commute_route(update, context, to_work=False)
 
 
 async def commuter_my_times_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -296,9 +368,9 @@ async def commuter_my_times_callback(update: Update, context: ContextTypes.DEFAU
 
     profile = await get_commuter_profile(user_id)
     if not profile:
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             t("commuter_no_profile", lang),
-            parse_mode="MarkdownV2",
             reply_markup=commuter_menu_keyboard(False, lang),
         )
         return
@@ -310,16 +382,76 @@ async def commuter_my_times_callback(update: Update, context: ContextTypes.DEFAU
         work=escape_md(profile.get("work_name", "?")),
     )
 
-    await query.edit_message_text(
-        text,
-        parse_mode="MarkdownV2",
-        reply_markup=commuter_quick_actions_keyboard(lang),
-    )
+    await safe_edit_message(query, text,
+                            reply_markup=commuter_quick_actions_keyboard(lang))
 
 
 # ===================================================================
-# Text input handler (for setup flow)
+# Setup flow input handling
 # ===================================================================
+
+async def _store_setup_location(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                                step: str, location: dict, lang: str) -> None:
+    """Persist a resolved home/work location and advance the wizard."""
+    setup = context.user_data.get("commuter_setup", {})
+    prefix = "home" if step == "home" else "work"
+    setup[f"{prefix}_name"] = location["name"]
+    setup[f"{prefix}_lat"] = location["lat"]
+    setup[f"{prefix}_lon"] = location["lon"]
+    context.user_data["commuter_setup"] = setup
+
+    if step == "home":
+        context.user_data["commuter_step"] = "work"
+        await update.message.reply_text(
+            t("commuter_ask_work", lang) + "\n\n" + tf("commuter_location_hint", lang),
+            parse_mode="MarkdownV2",
+            reply_markup=commuter_setup_keyboard("work", lang),
+        )
+    else:
+        context.user_data["commuter_step"] = "mode"
+        await update.message.reply_text(
+            t("commuter_ask_mode", lang),
+            parse_mode="MarkdownV2",
+            reply_markup=commuter_mode_keyboard(lang),
+        )
+
+
+async def handle_commuter_location(update: Update,
+                                   context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Consume a shared location as the home/work step. Returns True if handled.
+
+    Called from the location handler so people whose home is an ordinary address
+    (i.e. almost everyone) can set up a profile at all.
+    """
+    step = context.user_data.get("commuter_step") if isinstance(
+        getattr(context, "user_data", None), dict) else None
+    if step not in _LOCATION_STEPS:
+        return False
+
+    location = getattr(update.message, "location", None)
+    if not location:
+        return False
+
+    lang = get_lang(update)
+    lat, lon = location.latitude, location.longitude
+
+    if not is_valid_porto_coords(lat, lon):
+        await update.message.reply_text(
+            tf("commuter_invalid_coords", lang),
+            parse_mode="MarkdownV2",
+            reply_markup=commuter_setup_keyboard(step, lang),
+        )
+        return True
+
+    label = "🏠 " if step == "home" else "🏢 "
+    resolved = {
+        "name": label + tf("my_location", lang),
+        "lat": float(lat),
+        "lon": float(lon),
+    }
+    await _store_setup_location(update, context, step, resolved, lang)
+    return True
+
 
 async def handle_commuter_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """Handle text input during commuter setup. Returns True if handled."""
@@ -332,50 +464,27 @@ async def handle_commuter_text_input(update: Update, context: ContextTypes.DEFAU
     user_id = update.effective_user.id
     setup = context.user_data.get("commuter_setup", {})
 
-    if step == "home":
+    if step in _LOCATION_STEPS:
         location = await _resolve_location_async(text)
         if not location:
             await update.message.reply_text(
-                t("commuter_location_not_found", lang).format(query=escape_md(text)),
+                t("commuter_location_not_found", lang).format(query=escape_md(text))
+                + "\n\n" + tf("commuter_location_hint", lang),
                 parse_mode="MarkdownV2",
-                reply_markup=commuter_setup_keyboard("home", lang),
+                reply_markup=commuter_setup_keyboard(step, lang),
             )
             return True
 
-        setup["home_name"] = location["name"]
-        setup["home_lat"] = location["lat"]
-        setup["home_lon"] = location["lon"]
-        context.user_data["commuter_setup"] = setup
-        context.user_data["commuter_step"] = "work"
-
-        await update.message.reply_text(
-            t("commuter_ask_work", lang),
-            parse_mode="MarkdownV2",
-            reply_markup=commuter_setup_keyboard("work", lang),
-        )
-        return True
-
-    elif step == "work":
-        location = await _resolve_location_async(text)
-        if not location:
+        if not is_valid_porto_coords(location.get("lat"), location.get("lon")):
+            # Never store a broken profile.
             await update.message.reply_text(
-                t("commuter_location_not_found", lang).format(query=escape_md(text)),
+                tf("commuter_invalid_coords", lang),
                 parse_mode="MarkdownV2",
-                reply_markup=commuter_setup_keyboard("work", lang),
+                reply_markup=commuter_setup_keyboard(step, lang),
             )
             return True
 
-        setup["work_name"] = location["name"]
-        setup["work_lat"] = location["lat"]
-        setup["work_lon"] = location["lon"]
-        context.user_data["commuter_setup"] = setup
-        context.user_data["commuter_step"] = "mode"
-
-        await update.message.reply_text(
-            t("commuter_ask_mode", lang),
-            parse_mode="MarkdownV2",
-            reply_markup=commuter_mode_keyboard(lang),
-        )
+        await _store_setup_location(update, context, step, location, lang)
         return True
 
     elif step == "departure":
@@ -409,6 +518,17 @@ async def handle_commuter_text_input(update: Update, context: ContextTypes.DEFAU
 
         setup["usual_return_time"] = text
         context.user_data["commuter_setup"] = setup
+
+        # Refuse to persist a profile whose coordinates would be unusable.
+        if not (is_valid_porto_coords(setup.get("home_lat"), setup.get("home_lon"))
+                and is_valid_porto_coords(setup.get("work_lat"), setup.get("work_lon"))):
+            context.user_data["commuter_step"] = "home"
+            await update.message.reply_text(
+                tf("commuter_invalid_coords", lang),
+                parse_mode="MarkdownV2",
+                reply_markup=commuter_setup_keyboard("home", lang),
+            )
+            return True
 
         # Save the profile
         await save_commuter_profile(user_id, setup)

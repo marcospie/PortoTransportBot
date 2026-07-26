@@ -27,6 +27,10 @@ def main_menu_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
             InlineKeyboardButton(t("kb_tourist", lang), callback_data="tourist:menu"),
         ],
         [
+            InlineKeyboardButton(t("kb_zones", lang), callback_data="menu:zones"),
+            InlineKeyboardButton(t("kb_commuter", lang), callback_data="menu:commuter"),
+        ],
+        [
             InlineKeyboardButton(t("kb_favorites", lang), callback_data="menu:favorites"),
             InlineKeyboardButton(t("kb_events", lang), callback_data="menu:events"),
             InlineKeyboardButton(t("kb_weather", lang), callback_data="menu:weather"),
@@ -218,57 +222,87 @@ def metro_line_actions_keyboard(line_code: str, lang: str = "pt") -> InlineKeybo
     ])
 
 
+#: Stations shown per page when the line view is paginated.
+METRO_LINE_PAGE_SIZE = 10
+
+#: Hard cap on station buttons when the whole line is rendered at once, so the
+#: keyboard can never exceed what Telegram is willing to render.
+_METRO_LINE_MAX_BUTTONS = 40
+
+
+def metro_line_page_callback(line_code: str, page: int) -> str:
+    """Callback data for a paginated metro line view.
+
+    Kept as a helper so the handler side has a single definition to parse.
+    """
+    return f"metro:line:{line_code}:page:{page}"
+
+
 def metro_line_detail_keyboard(line_code: str, stations: list[str],
                                 stations_data: dict | None = None,
-                                lang: str = "pt") -> InlineKeyboardMarkup:
-    """Build keyboard for line detail view with key station buttons.
+                                lang: str = "pt",
+                                page: int | None = None,
+                                per_page: int = METRO_LINE_PAGE_SIZE) -> InlineKeyboardMarkup:
+    """Build keyboard for a line detail view with a button per station.
 
-    Shows up to 6 key stations (first, last, and transfer stations)
-    plus frequencies and back buttons.
+    Every station on the line is tappable, so a mid-line station no longer
+    requires a fresh search.
+
+    ``page`` controls paging:
+
+    * ``None`` (default) renders the whole line in one keyboard and emits no
+      pagination buttons -- safe for callers that cannot yet handle the
+      ``metro:line:<code>:page:<n>`` callback.
+    * an ``int`` renders that page plus previous/next buttons.
     """
-    # Collect key stations: first, last, and transfer stations (stations
-    # served by more than one line).
-    key_stations: list[str] = []
-    transfer_stations: list[str] = []
-
-    if stations_data:
-        for name in stations:
-            sdata = stations_data.get(name, {})
-            if len(sdata.get("lines", [])) > 1:
-                transfer_stations.append(name)
-
-    # Always include first and last
-    if stations:
-        key_stations.append(stations[0])
-    # Add transfer stations (keep order, skip duplicates with first/last)
-    for ts in transfer_stations:
-        if ts not in key_stations:
-            key_stations.append(ts)
-    if stations and stations[-1] not in key_stations:
-        key_stations.append(stations[-1])
-
-    # Limit to 6 stations
-    key_stations = key_stations[:6]
-
     line_data = METRO_LINES.get(line_code, {})
     emoji = line_data.get("emoji", "🚇")
 
+    total = len(stations)
+    if page is None:
+        page_stations = list(stations[:_METRO_LINE_MAX_BUTTONS])
+        total_pages = 1
+        page = 0
+    else:
+        per_page = max(1, per_page)
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        page = max(0, min(page, total_pages - 1))
+        start = page * per_page
+        page_stations = list(stations[start:start + per_page])
+
     buttons = []
-    # Station buttons in rows of 2
+    # Station buttons in rows of 2, in line order.
     row: list[InlineKeyboardButton] = []
-    for name in key_stations:
+    for name in page_stations:
         label = f"{emoji} {name}"
         if len(label) > 40:
             label = f"{emoji} {name[:32]}..."
         cb_data = f"metro:station:{name}"
         # Telegram limits callback_data to 64 bytes
-        if len(cb_data.encode("utf-8")) <= 64:
-            row.append(InlineKeyboardButton(label, callback_data=cb_data))
+        if len(cb_data.encode("utf-8")) > 64:
+            continue
+        row.append(InlineKeyboardButton(label, callback_data=cb_data))
         if len(row) == 2:
             buttons.append(row)
             row = []
     if row:
         buttons.append(row)
+
+    if total_pages > 1:
+        nav_row = []
+        if page > 0:
+            nav_row.append(InlineKeyboardButton(
+                t("kb_previous", lang),
+                callback_data=metro_line_page_callback(line_code, page - 1),
+            ))
+        nav_row.append(InlineKeyboardButton(f"{page + 1}/{total_pages}",
+                                            callback_data="noop"))
+        if page < total_pages - 1:
+            nav_row.append(InlineKeyboardButton(
+                t("kb_next", lang),
+                callback_data=metro_line_page_callback(line_code, page + 1),
+            ))
+        buttons.append(nav_row)
 
     buttons.append([InlineKeyboardButton(t("kb_freq_detail", lang), callback_data=f"metro:line_freq:{line_code}")])
     buttons.append([InlineKeyboardButton(t("kb_back", lang), callback_data="metro:lines")])
@@ -339,6 +373,33 @@ def metrobus_lines_keyboard(lang: str = "pt") -> InlineKeyboardMarkup:
 
 # --- Favorites Keyboards ---
 
+# Every favorite type maps to the callback prefix of the handler that can
+# actually show it, plus the emoji used for that mode.  Keeping this in one
+# place stops train/metrobus favorites from being routed to the metro handler
+# (which then reports "station not found").
+FAVORITE_ROUTES: dict[str, tuple[str, str]] = {
+    "bus": ("bus:stop:", "🚌"),
+    "metro": ("metro:station:", "🚇"),
+    "metrobus": ("metrobus:stop:", "\U0001f68d"),
+    "train": ("train:station:", "\U0001f686"),
+}
+
+# Types whose id is an opaque code worth showing next to the name.
+_CODE_LIKE_TYPES = ("bus",)
+
+
+def favorite_callback_data(fav_type: str, fav_id: str) -> str:
+    """Return the callback_data that opens a favorite in its own handler."""
+    prefix, _ = FAVORITE_ROUTES.get(fav_type, FAVORITE_ROUTES["metro"])
+    return f"{prefix}{fav_id}"
+
+
+def favorite_emoji(fav_type: str) -> str:
+    """Return the emoji for a favorite type."""
+    _, emoji = FAVORITE_ROUTES.get(fav_type, FAVORITE_ROUTES["metro"])
+    return emoji
+
+
 def favorites_keyboard(favorites: list[dict], lang: str = "pt") -> InlineKeyboardMarkup:
     if not favorites:
         return InlineKeyboardMarkup([
@@ -346,6 +407,12 @@ def favorites_keyboard(favorites: list[dict], lang: str = "pt") -> InlineKeyboar
                                   switch_inline_query_current_chat="bus ")],
             [InlineKeyboardButton(t("kb_find_station", lang),
                                   switch_inline_query_current_chat="metro ")],
+            [
+                InlineKeyboardButton(t("kb_metrobus", lang),
+                                      switch_inline_query_current_chat="metrobus "),
+                InlineKeyboardButton(t("kb_trains", lang),
+                                      switch_inline_query_current_chat="train "),
+            ],
             [InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")],
         ])
 
@@ -354,16 +421,23 @@ def favorites_keyboard(favorites: list[dict], lang: str = "pt") -> InlineKeyboar
         ftype = fav["type"]
         fid = fav["id"]
         name = fav.get("name", fid)
-        if ftype == "bus":
-            buttons.append([
-                InlineKeyboardButton(f"🚌 {name} ({fid})", callback_data=f"bus:stop:{fid}"),
-                InlineKeyboardButton("🗑", callback_data=f"fav:remove:{ftype}:{fid}"),
-            ])
+        emoji = favorite_emoji(ftype)
+        if ftype in _CODE_LIKE_TYPES:
+            label = f"{emoji} {name} ({fid})"
         else:
-            buttons.append([
-                InlineKeyboardButton(f"🚇 {name}", callback_data=f"metro:station:{fid}"),
-                InlineKeyboardButton("🗑", callback_data=f"fav:remove:{ftype}:{fid}"),
-            ])
+            label = f"{emoji} {name}"
+        if len(label) > 55:
+            label = f"{emoji} {name[:48]}…"
+
+        row = []
+        open_cb = favorite_callback_data(ftype, fid)
+        if len(open_cb.encode("utf-8")) <= 64:
+            row.append(InlineKeyboardButton(label, callback_data=open_cb))
+        remove_cb = f"fav:remove:{ftype}:{fid}"
+        if len(remove_cb.encode("utf-8")) <= 64:
+            row.append(InlineKeyboardButton("🗑", callback_data=remove_cb))
+        if row:
+            buttons.append(row)
 
     buttons.append([InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")])
     return InlineKeyboardMarkup(buttons)
@@ -666,8 +740,19 @@ def accessibility_station_keyboard(station_name: str, lang: str = "pt") -> Inlin
 
 # --- Events Keyboards ---
 
-def events_today_keyboard(events_list: list, lang: str = "pt", show_more: bool = False, upcoming: bool = False) -> InlineKeyboardMarkup:
-    """Build keyboard showing today's (or upcoming) events."""
+def events_today_keyboard(events_list: list, lang: str = "pt",
+                          show_more: bool = True,
+                          upcoming: bool = False) -> InlineKeyboardMarkup:
+    """Build keyboard showing today's (or upcoming) events.
+
+    Args:
+        events_list: Events to render as buttons.
+        lang: ``"pt"`` or ``"en"``.
+        show_more: When False the "more events" button is omitted -- used when
+            there is nothing else to show, so the button is never a dead end.
+        upcoming: When True the list is of future events rather than today's,
+            so a direct "all events" shortcut is offered as well.
+    """
     from bot.services.events import EVENTS
 
     buttons = []
@@ -681,7 +766,12 @@ def events_today_keyboard(events_list: list, lang: str = "pt", show_more: bool =
         buttons.append([
             InlineKeyboardButton(label, callback_data=f"events:detail:{idx}")
         ])
-    buttons.append([InlineKeyboardButton(t("kb_events_more", lang), callback_data="events:categories")])
+    if upcoming:
+        buttons.append([InlineKeyboardButton(t("kb_events_all", lang),
+                                             callback_data="events:cat:all")])
+    if show_more:
+        buttons.append([InlineKeyboardButton(t("kb_events_more", lang),
+                                             callback_data="events:categories")])
     buttons.append([InlineKeyboardButton(t("back_main", lang), callback_data="menu:main")])
     return InlineKeyboardMarkup(buttons)
 

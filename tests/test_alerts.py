@@ -138,13 +138,27 @@ class TestAlertService:
         assert result == SAMPLE_ALERTS
 
     @pytest.mark.asyncio
-    async def test_get_active_alerts_fallback(self):
-        """Test that get_active_alerts returns fallback when APIs fail."""
+    async def test_no_fabricated_fallback_alerts(self):
+        """When sources answer with nothing, no alerts may be invented."""
         with patch("bot.services.alerts._fetch_stcp_alerts", new_callable=AsyncMock, return_value=[]), \
              patch("bot.services.alerts._fetch_metro_alerts", new_callable=AsyncMock, return_value=[]):
             result = await get_active_alerts()
-            assert len(result) > 0  # Should have fallback alerts
-            assert any(a.get("source") == "fallback" for a in result)
+            assert list(result) == []
+            # The sources answered, so this is a genuine "no alerts".
+            assert result.source_available is True
+            assert not any(a.get("source") == "fallback" for a in result)
+
+    @pytest.mark.asyncio
+    async def test_unreachable_sources_report_unavailable(self):
+        """When every source fails, the result is empty AND flagged."""
+        with patch("bot.services.alerts._fetch_stcp_alerts", new_callable=AsyncMock,
+                   side_effect=RuntimeError("boom")), \
+             patch("bot.services.alerts._fetch_metro_alerts", new_callable=AsyncMock,
+                   side_effect=RuntimeError("boom")):
+            result = await get_active_alerts()
+            assert list(result) == []
+            assert result.source_available is False
+            assert set(result.sources_failed) == {"stcp", "metro"}
 
     @pytest.mark.asyncio
     async def test_get_alerts_for_line(self):

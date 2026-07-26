@@ -9,6 +9,7 @@ from bot.keyboards.inline import weather_keyboard
 from bot.services.weather import get_weather_info, get_transport_tip
 from bot.utils.formatting import escape_md
 from bot.utils.i18n import get_lang, t
+from bot.utils.telegram import safe_edit_message
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,6 @@ async def weather_menu_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     msg = await _format_weather_message(lang)
 
-    await query.edit_message_text(
-        msg,
-        parse_mode="MarkdownV2",
-        reply_markup=weather_keyboard(lang),
-    )
+    # Tapping "refresh" before the forecast changes produces an identical
+    # message; Telegram calls that an error, the user must not.
+    await safe_edit_message(query, msg, reply_markup=weather_keyboard(lang))
