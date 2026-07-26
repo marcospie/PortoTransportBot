@@ -1,6 +1,11 @@
 """Simple internationalization for the bot. Supports PT and EN."""
 
+import asyncio
+import logging
+
 from telegram import Update
+
+logger = logging.getLogger(__name__)
 
 TRANSLATIONS = {
     "pt": {
@@ -23,14 +28,30 @@ TRANSLATIONS = {
         "help": (
             "ℹ️ *Ajuda*\n"
             "━━━━━━━━━━━━━━━━\n\n"
-            "*Comandos:*\n"
+            "🚍 *Transporte*\n"
             "  /bus — Autocarros STCP\n"
             "  /metro — Metro do Porto\n"
-            "  /stop `BCM2` — Consulta rápida\n"
+            "  /comboios — Comboios CP urbanos\n"
+            "  /metrobus — MetroBus BRT\n"
+            "  /stop `BCM2` — Paragem por código\n"
             "  /station `Trindade` — Estação de metro\n"
+            "  /estacao `Campanhã` — Estação de comboios\n\n"
+            "🗺 *Planeamento*\n"
             "  /route — Planear trajeto\n"
+            "  /commuter — Rotinas de quem viaja todos os dias\n"
+            "  /tourist — Guia turístico do Porto\n"
+            "  /zonas — Calcular zonas e preços Andante\n\n"
+            "📢 *Informação*\n"
+            "  /alertas — Alertas de serviço\n"
+            "  /meteo — Meteorologia e transportes\n"
+            "  /eventos — Eventos e como chegar\n"
+            "  /acessibilidade — Elevadores e acessos\n\n"
+            "⭐ *Pessoal*\n"
             "  /favorites — Os teus favoritos\n"
-            "  /settings — Configurações\n\n"
+            "  /fav — Favorito rápido\n"
+            "  /settings — Configurações e idioma\n"
+            "  /start — Menu principal\n"
+            "  /help — Esta ajuda\n\n"
             "*Como usar:*\n"
             "1️⃣ Escolhe 🚌 autocarros ou 🚇 metro\n"
             "2️⃣ Pesquisa por nome ou código\n"
@@ -88,11 +109,40 @@ TRANSLATIONS = {
         "settings_pick_language": "🌐 *Idioma*\n\nEscolhe o idioma do bot\\.\n_Automático_ usa o idioma do teu Telegram:",
         "settings_saved": "Guardado!",
         "settings_reset_done": "Configurações repostas!",
+        # Notifications (opt-in)
+        "settings_notifications": "🔔 Notificações: {value}",
+        "settings_notifications_on": "Ligadas",
+        "settings_notifications_off": "Desligadas",
+        "settings_pick_notifications": (
+            "🔔 *Notificações*\n\n"
+            "Recebe avisos quando houver alertas de serviço nas tuas linhas "
+            "e lembretes das tuas viagens habituais\\.\n"
+            "Estão desligadas por predefinição:"
+        ),
+        "notif_alert_title": "🔔 *Alerta de serviço*",
+        "notif_commute_reminder": "🔔 *Lembrete de viagem*",
+        # Shared UI labels
+        "cancel": "❌ Cancelar",
+        "back_to_menu": "🔙 Menu",
+        "frequencies": "🕐 Frequências",
+        "option_not_available": "⌛ Essa opção já não está disponível\\. Faz a pesquisa outra vez\\.",
+        # Shared data-availability messages
+        "zones_no_station_in_zone": "Nenhuma estação nesta zona",
+        "no_alerts_of_type": "ℹ️ Não há alertas deste tipo neste momento\\.",
+        "alerts_source_unavailable": (
+            "⚠️ Não foi possível verificar alertas agora\\.\n"
+            "Tenta novamente dentro de alguns minutos\\."
+        ),
+        "stcp_data_unavailable": (
+            "⚠️ Dados STCP temporariamente indisponíveis\\.\n"
+            "Tenta novamente dentro de alguns minutos\\."
+        ),
+        "data_estimated": "_frequência típica — não é horário real_",
         # Errors
         "error_generic": "❌ Ocorreu um erro\\. Tenta novamente\\.",
         # Bus
         "bus_title": "🚌 *Autocarros STCP*\n\nEscolhe uma opção:",
-        "bus_stop_usage": "Uso: /stop <código>\nExemplo: `/stop BCM2`",
+        "bus_stop_usage": "Uso: /stop \\<código\\>\nExemplo: `/stop BCM2`",
         "bus_find_title": "🔍 *Encontrar paragem*\n\nToca no botão abaixo e começa a escrever \\- as sugestões aparecem enquanto digitas\\!\n\nExemplo: `BIBG` → BIBG1, BIBG2 \\| `Casa` → Casa da Música",
         "bus_find_button": "🔍 Escrever nome ou código...",
         "bus_code_title": "🔢 *Consultar por código*\n\nToca no botão abaixo e escreve o código \\- as sugestões aparecem enquanto digitas\\!\n\nExemplo: `BCM` → BCM1, BCM2 \\| `TRD` → TRD1, TRD2",
@@ -120,7 +170,7 @@ TRANSLATIONS = {
         "tip_direct_search": "💡 *Dica:* Podes escrever o nome ou código de qualquer paragem diretamente no chat, sem usar o menu\\!",
         # Metro
         "metro_title": "🚇 *Metro do Porto*\n\nEscolhe uma opção:",
-        "metro_station_usage": "Uso: /station <nome>\nExemplo: `/station Trindade`",
+        "metro_station_usage": "Uso: /station \\<nome\\>\nExemplo: `/station Trindade`",
         "metro_search_title": "🔍 *Pesquisar estação*\n\nToca no botão abaixo e começa a escrever \\- as sugestões aparecem enquanto digitas\\!\n\nExemplo: `Trind` → Trindade, `Bol` → Bolhão",
         "metro_search_button": "🔍 Escrever nome da estação...",
         "metro_lines_title": "🗺 *Linhas do Metro do Porto*\n\n{lines}\n\nSeleciona uma linha para mais detalhes:",
@@ -261,7 +311,7 @@ TRANSLATIONS = {
         "onboard_welcome": "\ud83d\udc4b Ol\u00e1\\! Sou o *Porto Transport Bot*\\.\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\nConsulta transportes p\u00fablicos do Porto em tempo real\\.\n\nPara come\u00e7ar, escolhe uma op\u00e7\u00e3o:",
         # Trains (CP)
         "trains_title": "🚆 *Comboios CP*\n\nEscolhe uma opção:",
-        "trains_station_usage": "Uso: /estacao <nome>\nExemplo: `/estacao Campanha`",
+        "trains_station_usage": "Uso: /estacao \\<nome\\>\nExemplo: `/estacao Campanha`",
         "trains_search_title": "🔍 *Pesquisar estação CP*\n\nToca no botão abaixo e começa a escrever \\- as sugestões aparecem enquanto digitas\\!\n\nExemplo: `Camp` → Campanha, `Erm` → Ermesinde",
         "trains_search_button": "🔍 Escrever nome da estação...",
         "trains_lines_title": "🗺 *Linhas CP \\- Porto*\n\n{lines}\n\nSeleciona uma linha para mais detalhes:",
@@ -291,7 +341,7 @@ TRANSLATIONS = {
         "tourist_line": "🔹 *Linha:* {line}",
         "tourist_bus_alt": "🚌 *Alternativa autocarro:* {buses}",
         "tourist_zone": "🎫 *Zona Andante:* {zone}",
-        "tourist_walk": "🚶 *A pé:* ~{min} min da estação",
+        "tourist_walk": "🚶 *A pé:* \\~{min} min da estação",
         "tourist_walk_zero": "🚶 *A pé:* Saída direta",
         "tourist_tip": "💡 *Dica:* {tip}",
         "tourist_no_destinations": "Sem destinos nesta categoria\\.",
@@ -491,11 +541,11 @@ TRANSLATIONS = {
         "weather_sunrise": "Nascer do sol",
         "weather_sunset": "Pôr do sol",
         "weather_tip": "Dica de transporte",
-        "weather_tip_rain": "Chuva provável - prefira o metro",
-        "weather_tip_nice": "Bom tempo - agradável para caminhar",
-        "weather_tip_hot": "Calor - prefira transportes com ar condicionado",
-        "weather_tip_cold": "Frio - abrigue-se nas estações",
-        "weather_disclaimer": "Fonte: Open-Meteo.com (tempo real)",
+        "weather_tip_rain": "Chuva provável \\- prefira o metro",
+        "weather_tip_nice": "Bom tempo \\- agradável para caminhar",
+        "weather_tip_hot": "Calor \\- prefira transportes com ar condicionado",
+        "weather_tip_cold": "Frio \\- abrigue\\-se nas estações",
+        "weather_disclaimer": "Fonte: Open\\-Meteo\\.com \\(tempo real\\)",
         "kb_weather": "🌤 Meteo",
     },
     "en": {
@@ -518,14 +568,30 @@ TRANSLATIONS = {
         "help": (
             "ℹ️ *Help*\n"
             "━━━━━━━━━━━━━━━━\n\n"
-            "*Commands:*\n"
-            "  /bus — STCP Buses\n"
+            "🚍 *Transport*\n"
+            "  /bus — STCP buses\n"
             "  /metro — Porto Metro\n"
-            "  /stop `BCM2` — Quick stop lookup\n"
+            "  /comboios — CP suburban trains\n"
+            "  /metrobus — MetroBus BRT\n"
+            "  /stop `BCM2` — Bus stop by code\n"
             "  /station `Trindade` — Metro station\n"
+            "  /estacao `Campanhã` — Train station\n\n"
+            "🗺 *Planning*\n"
             "  /route — Plan a route\n"
+            "  /commuter — Daily commute routines\n"
+            "  /tourist — Porto tourist guide\n"
+            "  /zonas — Andante zones and fares\n\n"
+            "📢 *Information*\n"
+            "  /alertas — Service alerts\n"
+            "  /meteo — Weather and transport\n"
+            "  /eventos — Events and how to get there\n"
+            "  /acessibilidade — Lifts and step\\-free access\n\n"
+            "⭐ *Personal*\n"
             "  /favorites — Your favorites\n"
-            "  /settings — Settings\n\n"
+            "  /fav — Quick favorite\n"
+            "  /settings — Settings and language\n"
+            "  /start — Main menu\n"
+            "  /help — This help\n\n"
             "*How to use:*\n"
             "1️⃣ Choose 🚌 buses or 🚇 metro\n"
             "2️⃣ Search by name or stop code\n"
@@ -583,11 +649,40 @@ TRANSLATIONS = {
         "settings_pick_language": "🌐 *Language*\n\nChoose the bot language\\.\n_Auto_ uses your Telegram language:",
         "settings_saved": "Saved!",
         "settings_reset_done": "Settings reset!",
+        # Notifications (opt-in)
+        "settings_notifications": "🔔 Notifications: {value}",
+        "settings_notifications_on": "On",
+        "settings_notifications_off": "Off",
+        "settings_pick_notifications": (
+            "🔔 *Notifications*\n\n"
+            "Get a heads\\-up when there are service alerts on your lines "
+            "and reminders for your usual trips\\.\n"
+            "They are off by default:"
+        ),
+        "notif_alert_title": "🔔 *Service alert*",
+        "notif_commute_reminder": "🔔 *Commute reminder*",
+        # Shared UI labels
+        "cancel": "❌ Cancel",
+        "back_to_menu": "🔙 Menu",
+        "frequencies": "🕐 Frequencies",
+        "option_not_available": "⌛ That option is no longer available\\. Please search again\\.",
+        # Shared data-availability messages
+        "zones_no_station_in_zone": "No station in this zone",
+        "no_alerts_of_type": "ℹ️ There are no alerts of this type right now\\.",
+        "alerts_source_unavailable": (
+            "⚠️ Could not check alerts right now\\.\n"
+            "Please try again in a few minutes\\."
+        ),
+        "stcp_data_unavailable": (
+            "⚠️ STCP data temporarily unavailable\\.\n"
+            "Please try again in a few minutes\\."
+        ),
+        "data_estimated": "_typical frequency — not a real timetable_",
         # Errors
         "error_generic": "❌ An error occurred\\. Please try again\\.",
         # Bus
         "bus_title": "🚌 *STCP Buses*\n\nChoose an option:",
-        "bus_stop_usage": "Usage: /stop <code>\nExample: `/stop BCM2`",
+        "bus_stop_usage": "Usage: /stop \\<code\\>\nExample: `/stop BCM2`",
         "bus_find_title": "🔍 *Find stop*\n\nTap the button below and start typing \\- suggestions appear as you type\\!\n\nExample: `BIBG` → BIBG1, BIBG2 \\| `Casa` → Casa da Música",
         "bus_find_button": "🔍 Type name or code...",
         "bus_code_title": "🔢 *Look up by code*\n\nTap the button below and type the code \\- suggestions appear as you type\\!\n\nExample: `BCM` → BCM1, BCM2 \\| `TRD` → TRD1, TRD2",
@@ -615,7 +710,7 @@ TRANSLATIONS = {
         "tip_direct_search": "💡 *Tip:* You can type any stop name or code directly in the chat, without using the menu\\!",
         # Metro
         "metro_title": "🚇 *Porto Metro*\n\nChoose an option:",
-        "metro_station_usage": "Usage: /station <name>\nExample: `/station Trindade`",
+        "metro_station_usage": "Usage: /station \\<name\\>\nExample: `/station Trindade`",
         "metro_search_title": "🔍 *Search station*\n\nTap the button below and start typing \\- suggestions appear as you type\\!\n\nExample: `Trind` → Trindade, `Bol` → Bolhão",
         "metro_search_button": "🔍 Type station name...",
         "metro_lines_title": "🗺 *Porto Metro Lines*\n\n{lines}\n\nSelect a line for more details:",
@@ -756,7 +851,7 @@ TRANSLATIONS = {
         "onboard_welcome": "\ud83d\udc4b Hello\\! I'm the *Porto Transport Bot*\\.\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\nLook up Porto public transport in real time\\.\n\nTo get started, choose an option:",
         # Trains (CP)
         "trains_title": "🚆 *CP Trains*\n\nChoose an option:",
-        "trains_station_usage": "Usage: /estacao <name>\nExample: `/estacao Campanha`",
+        "trains_station_usage": "Usage: /estacao \\<name\\>\nExample: `/estacao Campanha`",
         "trains_search_title": "🔍 *Search CP station*\n\nTap the button below and start typing \\- suggestions appear as you type\\!\n\nExample: `Camp` → Campanha, `Erm` → Ermesinde",
         "trains_search_button": "🔍 Type station name...",
         "trains_lines_title": "🗺 *CP Lines \\- Porto*\n\n{lines}\n\nSelect a line for more details:",
@@ -786,7 +881,7 @@ TRANSLATIONS = {
         "tourist_line": "🔹 *Line:* {line}",
         "tourist_bus_alt": "🚌 *Bus alternative:* {buses}",
         "tourist_zone": "🎫 *Andante Zone:* {zone}",
-        "tourist_walk": "🚶 *Walk:* ~{min} min from station",
+        "tourist_walk": "🚶 *Walk:* \\~{min} min from station",
         "tourist_walk_zero": "🚶 *Walk:* Direct exit",
         "tourist_tip": "💡 *Tip:* {tip}",
         "tourist_no_destinations": "No destinations in this category\\.",
@@ -986,11 +1081,11 @@ TRANSLATIONS = {
         "weather_sunrise": "Sunrise",
         "weather_sunset": "Sunset",
         "weather_tip": "Transport tip",
-        "weather_tip_rain": "Rain likely - prefer metro",
-        "weather_tip_nice": "Nice weather - pleasant for walking",
-        "weather_tip_hot": "Hot - prefer air-conditioned transport",
-        "weather_tip_cold": "Cold - shelter in stations",
-        "weather_disclaimer": "Source: Open-Meteo.com (real-time)",
+        "weather_tip_rain": "Rain likely \\- prefer metro",
+        "weather_tip_nice": "Nice weather \\- pleasant for walking",
+        "weather_tip_hot": "Hot \\- prefer air\\-conditioned transport",
+        "weather_tip_cold": "Cold \\- shelter in stations",
+        "weather_disclaimer": "Source: Open\\-Meteo\\.com \\(real\\-time\\)",
         "kb_weather": "🌤 Weather",
     },
 }
@@ -1008,19 +1103,184 @@ ZONE_NAMES = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Language resolution
+#
+# The user can pick Auto / Português / English in /settings, and that choice is
+# persisted as the ``language`` setting. Reading that setting is async, while
+# ``get_lang()`` is called from ~200 places including sync code, so we keep a
+# small in-process cache of each user's *preference* ('auto' | 'pt' | 'en'):
+#
+#   * ``get_lang(update)``      -- sync, consults the cache first and falls back
+#                                  to the Telegram locale. Signature unchanged.
+#   * ``resolve_lang(update)``  -- async, reads (and caches) the stored setting.
+#   * ``set_lang_preference()`` -- write-through, called by the settings handler
+#                                  the moment the user changes the setting.
+#
+# ``get_lang()`` also kicks off a fire-and-forget prime of the cache when it is
+# called from inside a running event loop, so from the user's *second* message
+# onwards the stored preference is honoured everywhere without touching any of
+# the existing call sites.
+# ---------------------------------------------------------------------------
+
+DEFAULT_LANG = "pt"
+AUTO_LANG = "auto"
+
+# user_id -> stored preference ('auto' | 'pt' | 'en')
+_lang_pref_cache: dict[int, str] = {}
+# Strong references to in-flight priming tasks (so they are not GC'd mid-flight)
+_priming: dict[int, "asyncio.Task"] = {}
+
+
+def locale_lang(update: Update) -> str:
+    """Return the language implied by the user's Telegram locale.
+
+    Portuguese locales get Portuguese; every other *known* locale gets that
+    locale; any other locale (fr, es, de, ...) gets English rather than
+    Portuguese -- a tourist who does not read Portuguese is better served by
+    English. When no locale is available at all we keep the Porto-local
+    default of Portuguese.
+    """
+    user = getattr(update, "effective_user", None)
+    if user is None:
+        return DEFAULT_LANG
+    code = getattr(user, "language_code", None)
+    # Guard against MagicMock / non-string values from odd Update objects.
+    if not isinstance(code, str) or not code:
+        return DEFAULT_LANG
+    code = code[:2].lower()
+    if code.startswith("pt"):
+        return "pt"
+    if code in TRANSLATIONS:
+        return code
+    return "en"
+
+
+def _user_id(update: Update):
+    """Return the user id if it is usable as a cache key, else None."""
+    user = getattr(update, "effective_user", None)
+    uid = getattr(user, "id", None) if user is not None else None
+    return uid if isinstance(uid, int) else None
+
+
+def _apply_pref(pref, update: Update) -> str:
+    """Turn a stored preference into an actual language code."""
+    if isinstance(pref, str) and pref.lower() in TRANSLATIONS:
+        return pref.lower()
+    return locale_lang(update)
+
+
+def set_lang_preference(user_id, pref: str) -> None:
+    """Write a user's language preference straight into the cache.
+
+    Called by the settings handler so the very next rendered message already
+    uses the new language, without waiting for a DB round-trip.
+    """
+    if not isinstance(user_id, int):
+        return
+    pref = (pref or AUTO_LANG).lower()
+    if pref in TRANSLATIONS or pref == AUTO_LANG:
+        _lang_pref_cache[user_id] = pref
+    else:
+        _lang_pref_cache.pop(user_id, None)
+
+
+def clear_lang_cache(user_id=None) -> None:
+    """Forget cached preferences (all of them, or just one user's)."""
+    if user_id is None:
+        _lang_pref_cache.clear()
+    else:
+        _lang_pref_cache.pop(user_id, None)
+
+
+async def _load_pref(user_id: int) -> str:
+    """Read the stored ``language`` setting. Never raises."""
+    try:
+        from bot.database import get_user_settings
+
+        settings = await get_user_settings(user_id)
+        pref = (settings or {}).get("language", AUTO_LANG)
+        return pref.lower() if isinstance(pref, str) else AUTO_LANG
+    except Exception as err:  # DB down, no pool, unexpected schema...
+        logger.debug("Could not load language preference for %s: %s", user_id, err)
+        raise
+
+
+async def _prime(user_id: int) -> None:
+    try:
+        pref = await _load_pref(user_id)
+    except Exception:
+        return
+    finally:
+        _priming.pop(user_id, None)
+    _lang_pref_cache[user_id] = pref
+
+
+def _schedule_prime(user_id: int) -> None:
+    """Populate the cache in the background, if we are inside an event loop."""
+    if user_id in _lang_pref_cache or user_id in _priming:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return  # sync context, nothing we can do -- locale fallback applies
+    try:
+        _priming[user_id] = loop.create_task(_prime(user_id))
+    except Exception:  # pragma: no cover - defensive
+        _priming.pop(user_id, None)
+
+
 def get_lang(update: Update) -> str:
-    """Detect user language from Telegram settings."""
-    if update.effective_user and update.effective_user.language_code:
-        lang = update.effective_user.language_code[:2].lower()
-        if lang in TRANSLATIONS:
-            return lang
-    return "pt"
+    """Detect the language to render for this user (sync, never raises).
+
+    Order: cached stored preference -> Telegram locale -> Portuguese.
+    """
+    uid = _user_id(update)
+    if uid is not None:
+        pref = _lang_pref_cache.get(uid)
+        if pref is not None:
+            return _apply_pref(pref, update)
+        _schedule_prime(uid)
+    return locale_lang(update)
+
+
+async def resolve_lang(update: Update) -> str:
+    """Async counterpart of :func:`get_lang` that reads the stored setting.
+
+    Reads the persisted ``language`` setting (caching it for all the sync
+    ``get_lang()`` call sites) and resolves ``'auto'`` to the Telegram locale.
+    Falls back to the locale if the database is unavailable.
+    """
+    uid = _user_id(update)
+    if uid is None:
+        return locale_lang(update)
+
+    pref = _lang_pref_cache.get(uid)
+    if pref is None:
+        try:
+            pref = await _load_pref(uid)
+        except Exception:
+            return locale_lang(update)
+        _lang_pref_cache[uid] = pref
+    return _apply_pref(pref, update)
 
 
 def t(key: str, lang: str = "pt") -> str:
-    """Get translated string."""
-    translations = TRANSLATIONS.get(lang, TRANSLATIONS["pt"])
-    return translations.get(key, TRANSLATIONS["pt"].get(key, key))
+    """Get translated string.
+
+    Fallback chain: requested language -> Portuguese -> the raw key.
+    Never raises, whatever ``lang`` or ``key`` is.
+    """
+    translations = TRANSLATIONS.get(lang) if isinstance(lang, str) else None
+    if not isinstance(translations, dict):
+        translations = TRANSLATIONS["pt"]
+    try:
+        value = translations.get(key)
+        if value is None:
+            value = TRANSLATIONS["pt"].get(key)
+    except TypeError:  # unhashable key
+        return str(key)
+    return value if value is not None else str(key)
 
 
 def get_zone_display(zone_code: str) -> str:
