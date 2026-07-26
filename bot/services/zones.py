@@ -66,18 +66,16 @@ the answer is an estimate instead of presenting a guess as fact.
 import logging
 
 from bot.services import fares
-from bot.services.fares import (  # re-exported for convenience
-    ANDANTE_TOUR_PRICE,
-    LAST_VERIFIED,
-    SOURCE_URL,
-    TARIFF_EFFECTIVE_FROM,
-)
 
 logger = logging.getLogger(__name__)
 
-#: Backwards-compatible aliases -- prices now live in bot.services.fares.
+# Backwards-compatible aliases -- every price now lives in bot.services.fares.
 ZONE_PRICES = fares.OCCASIONAL_PRICES
 DAY_PASS_PRICES = fares.DAY_PASS_PRICES
+ANDANTE_TOUR_PRICE = fares.ANDANTE_TOUR_PRICE
+LAST_VERIFIED = fares.LAST_VERIFIED
+SOURCE_URL = fares.SOURCE_URL
+TARIFF_EFFECTIVE_FROM = fares.TARIFF_EFFECTIVE_FROM
 
 
 # ---------------------------------------------------------------------------

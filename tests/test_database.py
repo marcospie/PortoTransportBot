@@ -403,6 +403,52 @@ class TestNotificationsSetting:
         assert settings["notifications"] == "on"
 
     @pytest.mark.asyncio
+    async def test_opted_in_users_json_path(self, tmp_path):
+        settings_dir = tmp_path / "settings"
+        with patch("bot.database._use_db", False), \
+             patch("bot.database._SETTINGS_DIR", settings_dir):
+            assert await db.get_users_with_notifications_on() == []
+            await update_user_setting(1, "notifications", "on")
+            await update_user_setting(2, "notifications", "off")
+            await update_user_setting(3, "max_results", 8)  # never opted in
+            await update_user_setting(4, "notifications", "on")
+            assert await db.get_users_with_notifications_on() == [1, 4]
+
+    @pytest.mark.asyncio
+    async def test_opted_in_users_postgres_path(self):
+        """Must work in Postgres mode too - the JSON dir is empty there."""
+        conn = FakeConn()
+        conn.rows["favorites"] = []
+
+        async def fetch(sql, *args):
+            conn.queried.append((sql, args))
+            assert "user_settings" in sql
+            assert args == ("on",)
+            return [{"user_id": 7}, {"user_id": 9}]
+
+        conn.fetch = fetch
+        with use_fake_db(conn):
+            assert await db.get_users_with_notifications_on() == [7, 9]
+
+    @pytest.mark.asyncio
+    async def test_opted_in_users_ignores_corrupt_and_odd_filenames(self, tmp_path):
+        settings_dir = tmp_path / "settings"
+        settings_dir.mkdir()
+        (settings_dir / "not-a-user.json").write_text("{}")
+        (settings_dir / "55.json").write_text("{{{corrupt")
+        (settings_dir / "66.json").write_text(json.dumps({"notifications": "ON"}))
+        with patch("bot.database._use_db", False), \
+             patch("bot.database._SETTINGS_DIR", settings_dir):
+            # Corrupt file falls back to defaults (off); casing is normalised.
+            assert await db.get_users_with_notifications_on() == [66]
+
+    @pytest.mark.asyncio
+    async def test_opted_in_users_empty_when_no_settings_dir(self, tmp_path):
+        with patch("bot.database._use_db", False), \
+             patch("bot.database._SETTINGS_DIR", tmp_path / "nope"):
+            assert await db.get_users_with_notifications_on() == []
+
+    @pytest.mark.asyncio
     async def test_unknown_setting_still_rejected(self):
         for bad in ("nope", "language; DROP TABLE users --"):
             with patch("bot.database._use_db", False):

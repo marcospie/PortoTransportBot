@@ -24,9 +24,7 @@ from bot.services import fares
 from bot.services.zones import (
     ZONE_ADJACENCY,
     calculate_zones,
-    get_all_zones,
     get_stations_in_zone,
-    get_zone_for_station,
     resolve_station,
     search_station,
     suggest_stations,

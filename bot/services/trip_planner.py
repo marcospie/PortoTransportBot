@@ -442,12 +442,15 @@ def _terminus_coords_uncached(name: str, mode: str) -> tuple[float, float] | Non
 
 
 def _direction_towards(route: str, mode: str,
+                       origin_lat: float, origin_lon: float,
                        dest_lat: float, dest_lon: float) -> str:
     """Pick the terminus of *route* that the traveller is heading towards.
 
     The old code always used the *last* endpoint of the route string, which is
-    wrong roughly half of the time.  Lines here are linear, so the correct
-    headsign is simply the terminus nearest the destination.
+    wrong roughly half of the time.  Lines here are linear, so the right
+    headsign is the terminus we get *closer to* by travelling from origin to
+    destination — picking "nearest to the destination" alone is not enough,
+    because a mid-line destination can sit closer to the terminus behind you.
     """
     endpoints = _line_endpoints(route)
     if not endpoints:
@@ -455,18 +458,23 @@ def _direction_towards(route: str, mode: str,
     if len(endpoints) == 1:
         return endpoints[0]
 
-    best_name = ""
-    best_dist: float | None = None
+    scored: list[tuple[float, float, str]] = []
     for name in endpoints:
         coords = _terminus_coords(name, mode)
         if coords is None:
             continue
-        dist = _haversine(coords[0], coords[1], dest_lat, dest_lon)
-        if best_dist is None or dist < best_dist:
-            best_dist = dist
-            best_name = name
+        from_origin = _haversine(coords[0], coords[1], origin_lat, origin_lon)
+        from_dest = _haversine(coords[0], coords[1], dest_lat, dest_lon)
+        scored.append((from_dest, from_origin, name))
 
-    return best_name or endpoints[-1]
+    if not scored:
+        return endpoints[-1]
+
+    # Termini we are approaching (the destination is between us and them).
+    ahead = [s for s in scored if s[0] < s[1]]
+    candidates = ahead or scored
+    candidates.sort(key=lambda s: s[0])
+    return candidates[0][2]
 
 
 def _get_line_name(mode: str, line_code: str) -> str:

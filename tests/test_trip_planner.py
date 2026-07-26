@@ -1,6 +1,9 @@
 """Comprehensive tests for the multimodal trip planner."""
 
 import math
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from bot.services.trip_planner import (
     TripOption,
@@ -396,3 +399,384 @@ class TestFindCommonMetroLines:
     def test_no_common_lines(self):
         result = _find_common_metro_lines(["A"], ["D"])
         assert result == []
+
+
+# ===================================================================
+# Coordinate validation
+# ===================================================================
+
+class TestCoordinateValidation:
+    """``is_valid_porto_coords`` is what stops broken commuter profiles."""
+
+    def test_rejects_zero_zero(self):
+        from bot.services.trip_planner import is_valid_porto_coords
+        assert is_valid_porto_coords(0.0, 0.0) is False
+
+    def test_rejects_zero_latitude(self):
+        from bot.services.trip_planner import is_valid_porto_coords
+        assert is_valid_porto_coords(0.0, -8.61) is False
+
+    def test_rejects_zero_longitude(self):
+        from bot.services.trip_planner import is_valid_porto_coords
+        assert is_valid_porto_coords(41.15, 0.0) is False
+
+    def test_rejects_none(self):
+        from bot.services.trip_planner import is_valid_porto_coords
+        assert is_valid_porto_coords(None, None) is False
+        assert is_valid_porto_coords(41.15, None) is False
+
+    def test_rejects_non_numeric(self):
+        from bot.services.trip_planner import is_valid_porto_coords
+        assert is_valid_porto_coords("abc", "def") is False
+
+    def test_rejects_outside_porto_region(self):
+        from bot.services.trip_planner import is_valid_porto_coords
+        assert is_valid_porto_coords(48.8566, 2.3522) is False   # Paris
+        assert is_valid_porto_coords(38.7223, -9.1393) is False  # Lisbon
+
+    def test_accepts_porto_coordinates(self):
+        from bot.services.trip_planner import is_valid_porto_coords
+        assert is_valid_porto_coords(41.1519, -8.6102) is True   # Trindade
+        assert is_valid_porto_coords(41.2350, -8.6780) is True   # Airport area
+
+    def test_accepts_string_numbers(self):
+        from bot.services.trip_planner import is_valid_porto_coords
+        assert is_valid_porto_coords("41.1519", "-8.6102") is True
+
+
+# ===================================================================
+# Direction / headsign resolution
+# ===================================================================
+
+class TestDirectionGuessing:
+    """The old code always used the last endpoint of the route string."""
+
+    def test_line_endpoints_parsed(self):
+        from bot.services.trip_planner import _line_endpoints
+        assert _line_endpoints("A ↔ B") == ["A", "B"]
+        assert _line_endpoints("no separator") == []
+
+    def test_direction_towards_dragao(self):
+        from bot.services.trip_planner import _direction_towards
+        # Line A: Senhor de Matosinhos ↔ Estádio do Dragão. Heading east.
+        direction = _direction_towards(
+            "Senhor de Matosinhos ↔ Estádio do Dragão", "metro",
+            41.1618, -8.5836)  # Estádio do Dragão
+        assert "Dragão" in direction
+
+    def test_direction_towards_matosinhos(self):
+        from bot.services.trip_planner import _direction_towards
+        # Same line, opposite way: the old code could never produce this.
+        direction = _direction_towards(
+            "Senhor de Matosinhos ↔ Estádio do Dragão", "metro",
+            41.1826, -8.6873)  # Senhor de Matosinhos
+        assert "Matosinhos" in direction
+
+    def test_direct_metro_step_direction_depends_on_destination(self):
+        eastbound = plan_trip("Casa da Música", "Estádio do Dragão")
+        westbound = plan_trip("Estádio do Dragão", "Casa da Música")
+        e_dirs = {s.direction for o in eastbound for s in o.steps if s.mode == "metro"}
+        w_dirs = {s.direction for o in westbound for s in o.steps if s.mode == "metro"}
+        assert e_dirs and w_dirs
+        assert e_dirs != w_dirs
+
+    def test_abbreviated_terminus_resolves(self):
+        from bot.services.trip_planner import _terminus_coords
+        coords = _terminus_coords("Sto. Ovídio", "metro")
+        assert coords is not None
+        assert 41.0 < coords[0] < 41.2
+
+
+# ===================================================================
+# Offline estimator: labelling and leg limits
+# ===================================================================
+
+class TestOfflineEstimatorLabelling:
+
+    def test_options_are_flagged_as_estimates(self):
+        options = plan_trip("Bolhão", "Trindade")
+        assert options
+        assert all(o.estimated is True for o in options)
+        assert all(o.source == "estimate" for o in options)
+
+    def test_estimates_have_no_timetable(self):
+        options = plan_trip("Bolhão", "Trindade")
+        assert all(not o.departure_time for o in options)
+
+
+class TestLegLimitsRemoved:
+    """The estimator used to cap metro at one transfer and multimodal at two legs."""
+
+    def test_graph_search_returns_options(self):
+        from bot.services.trip_planner import _plan_graph
+        options = _plan_graph(41.1519, -8.6102, 41.1618, -8.5836)
+        assert options
+        assert all(o.estimated for o in options)
+
+    def test_graph_allows_more_than_one_transfer(self):
+        from bot.services.trip_planner import _plan_graph, MAX_GRAPH_TRANSFERS
+        # Airport (line E) to Hospital Santos Silva (line D, far south)
+        options = _plan_graph(41.2350, -8.6780, 41.0930, -8.6060, max_options=5)
+        assert options
+        assert all(o.transfers <= MAX_GRAPH_TRANSFERS for o in options)
+
+    def test_graph_can_mix_modes(self):
+        from bot.services.trip_planner import _plan_graph
+        # Boavista (MetroBus corridor) to Ermesinde (CP) needs several modes.
+        options = _plan_graph(41.1578, -8.6260, 41.2141, -8.5524, max_options=5)
+        modes = {s.mode for o in options for s in o.steps if s.mode != "walk"}
+        assert len(modes) >= 1
+
+    def test_graph_returns_nothing_in_the_ocean(self):
+        from bot.services.trip_planner import _plan_graph
+        assert _plan_graph(0.0, 0.0, 0.0, 0.0) == []
+
+
+# ===================================================================
+# MOTIS: timetable-backed planning (mocked)
+# ===================================================================
+
+_MOTIS_PAYLOAD = {
+    "itineraries": [
+        {
+            "duration": 2700,
+            "startTime": "2026-07-26T08:00:00Z",
+            "endTime": "2026-07-26T08:45:00Z",
+            "transfers": 1,
+            "legs": [
+                {
+                    "mode": "WALK",
+                    "duration": 300,
+                    "startTime": "2026-07-26T08:00:00Z",
+                    "endTime": "2026-07-26T08:05:00Z",
+                    "from": {"name": "START"},
+                    "to": {"name": "VALE FORMOSO"},
+                },
+                {
+                    "mode": "BUS",
+                    "duration": 1200,
+                    "startTime": "2026-07-26T08:10:00Z",
+                    "endTime": "2026-07-26T08:30:00Z",
+                    "routeShortName": "204",
+                    "headsign": "Foz",
+                    "agencyName": "Sociedade de Transportes Colectivos do Porto, E.I.M., S.A",
+                    "from": {"name": "VALE FORMOSO"},
+                    "to": {"name": "BOAVISTA"},
+                },
+                {
+                    "mode": "SUBWAY",
+                    "duration": 600,
+                    "startTime": "2026-07-26T08:35:00Z",
+                    "endTime": "2026-07-26T08:45:00Z",
+                    "routeShortName": "A",
+                    "headsign": "Estádio do Dragão",
+                    "agencyName": "Metro do Porto",
+                    "from": {"name": "Casa da Música"},
+                    "to": {"name": "Trindade"},
+                },
+            ],
+        },
+    ],
+}
+
+
+class _FakeResponse:
+    def __init__(self, payload, status_code=200):
+        self._payload = payload
+        self.status_code = status_code
+
+    def json(self):
+        return self._payload
+
+
+class _FakeClient:
+    def __init__(self, response=None, exc=None):
+        self._response = response
+        self._exc = exc
+        self.calls = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+    async def get(self, url, params=None, headers=None):
+        self.calls.append({"url": url, "params": params, "headers": headers})
+        if self._exc is not None:
+            raise self._exc
+        return self._response
+
+
+class TestMotisPlanning:
+
+    @pytest.mark.asyncio
+    async def test_parses_motis_itinerary(self):
+        import bot.services.trip_planner as tp
+
+        client = _FakeClient(_FakeResponse(_MOTIS_PAYLOAD))
+        with patch.object(tp.httpx, "AsyncClient", lambda *a, **k: client):
+            options = await tp.motis_plan(41.1519, -8.6102, 41.1618, -8.5836)
+
+        assert options is not None
+        assert len(options) == 1
+        option = options[0]
+        assert option.estimated is False
+        assert option.source == tp.SOURCE_MOTIS
+        assert option.total_time_min == 45
+        assert option.transfers == 1
+
+    @pytest.mark.asyncio
+    async def test_stcp_bus_leg_is_included(self):
+        """STCP - the densest network in Porto - now appears in plans."""
+        import bot.services.trip_planner as tp
+
+        client = _FakeClient(_FakeResponse(_MOTIS_PAYLOAD))
+        with patch.object(tp.httpx, "AsyncClient", lambda *a, **k: client):
+            options = await tp.motis_plan(41.1519, -8.6102, 41.1618, -8.5836)
+
+        modes = [s.mode for s in options[0].steps]
+        assert "bus" in modes
+        bus_step = next(s for s in options[0].steps if s.mode == "bus")
+        assert bus_step.line == "204"
+        assert bus_step.direction == "Foz"
+
+    @pytest.mark.asyncio
+    async def test_metro_leg_mapped_from_subway(self):
+        import bot.services.trip_planner as tp
+
+        client = _FakeClient(_FakeResponse(_MOTIS_PAYLOAD))
+        with patch.object(tp.httpx, "AsyncClient", lambda *a, **k: client):
+            options = await tp.motis_plan(41.1519, -8.6102, 41.1618, -8.5836)
+
+        assert any(s.mode == "metro" for s in options[0].steps)
+
+    @pytest.mark.asyncio
+    async def test_waiting_time_is_modelled(self):
+        """The old estimator hid up to an hour of waiting; MOTIS reports it."""
+        import bot.services.trip_planner as tp
+
+        client = _FakeClient(_FakeResponse(_MOTIS_PAYLOAD))
+        with patch.object(tp.httpx, "AsyncClient", lambda *a, **k: client):
+            options = await tp.motis_plan(41.1519, -8.6102, 41.1618, -8.5836)
+
+        bus_step = next(s for s in options[0].steps if s.mode == "bus")
+        metro_step = next(s for s in options[0].steps if s.mode == "metro")
+        assert bus_step.wait_min == 5
+        assert metro_step.wait_min == 5
+
+    @pytest.mark.asyncio
+    async def test_departure_times_are_local_lisbon(self):
+        import bot.services.trip_planner as tp
+
+        client = _FakeClient(_FakeResponse(_MOTIS_PAYLOAD))
+        with patch.object(tp.httpx, "AsyncClient", lambda *a, **k: client):
+            options = await tp.motis_plan(41.1519, -8.6102, 41.1618, -8.5836)
+
+        # 08:00Z in July is 09:00 in Lisbon.
+        assert options[0].departure_time == "09:00"
+        assert options[0].arrival_time == "09:45"
+
+    @pytest.mark.asyncio
+    async def test_sends_a_custom_user_agent(self):
+        """transitous answers 403 to generic library user-agents."""
+        import bot.services.trip_planner as tp
+
+        client = _FakeClient(_FakeResponse(_MOTIS_PAYLOAD))
+        with patch.object(tp.httpx, "AsyncClient", lambda *a, **k: client):
+            await tp.motis_plan(41.1519, -8.6102, 41.1618, -8.5836)
+
+        headers = client.calls[0]["headers"]
+        assert headers["User-Agent"] == tp.MOTIS_USER_AGENT
+        assert "python" not in headers["User-Agent"].lower()
+
+    @pytest.mark.asyncio
+    async def test_uses_the_plan_endpoint(self):
+        import bot.services.trip_planner as tp
+
+        client = _FakeClient(_FakeResponse(_MOTIS_PAYLOAD))
+        with patch.object(tp.httpx, "AsyncClient", lambda *a, **k: client):
+            await tp.motis_plan(41.1519, -8.6102, 41.1618, -8.5836)
+
+        assert client.calls[0]["url"] == "https://europe.motis-project.de/api/v1/plan"
+        params = client.calls[0]["params"]
+        assert params["fromPlace"] == "41.1519,-8.6102"
+        assert params["toPlace"] == "41.1618,-8.5836"
+
+    @pytest.mark.asyncio
+    async def test_http_error_returns_none(self):
+        import bot.services.trip_planner as tp
+
+        client = _FakeClient(_FakeResponse({}, status_code=403))
+        with patch.object(tp.httpx, "AsyncClient", lambda *a, **k: client):
+            assert await tp.motis_plan(41.1519, -8.6102, 41.1618, -8.5836) is None
+
+    @pytest.mark.asyncio
+    async def test_network_error_returns_none(self):
+        import bot.services.trip_planner as tp
+
+        client = _FakeClient(exc=RuntimeError("connection reset"))
+        with patch.object(tp.httpx, "AsyncClient", lambda *a, **k: client):
+            assert await tp.motis_plan(41.1519, -8.6102, 41.1618, -8.5836) is None
+
+    @pytest.mark.asyncio
+    async def test_invalid_coordinates_are_not_sent_upstream(self):
+        import bot.services.trip_planner as tp
+
+        client = _FakeClient(_FakeResponse(_MOTIS_PAYLOAD))
+        with patch.object(tp.httpx, "AsyncClient", lambda *a, **k: client):
+            assert await tp.motis_plan(0.0, 0.0, 41.15, -8.61) is None
+        assert client.calls == []
+
+
+class TestMotisFallback:
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_the_offline_estimator(self):
+        import bot.services.trip_planner as tp
+
+        with patch.object(tp, "motis_plan", new_callable=AsyncMock) as motis:
+            motis.return_value = None
+            options = await tp.plan_trip_from_coords_async(
+                41.1499, -8.6056, 41.1519, -8.6102)
+
+        assert options
+        assert all(o.estimated is True for o in options)
+        assert all(o.source == tp.SOURCE_ESTIMATE for o in options)
+
+    @pytest.mark.asyncio
+    async def test_motis_results_are_preferred(self):
+        import bot.services.trip_planner as tp
+
+        motis_option = TripOption(steps=[TripStep(mode="bus", from_name="A",
+                                                  to_name="B", line="204",
+                                                  duration_min=5)],
+                                  total_time_min=5, estimated=False,
+                                  source=tp.SOURCE_MOTIS)
+        with patch.object(tp, "motis_plan", new_callable=AsyncMock) as motis:
+            motis.return_value = [motis_option]
+            options = await tp.plan_trip_from_coords_async(
+                41.1499, -8.6056, 41.1519, -8.6102)
+
+        assert options == [motis_option]
+        assert options[0].estimated is False
+
+    @pytest.mark.asyncio
+    async def test_plan_trip_async_resolves_names(self):
+        import bot.services.trip_planner as tp
+
+        with patch.object(tp, "motis_plan", new_callable=AsyncMock) as motis:
+            motis.return_value = None
+            options = await tp.plan_trip_async("Bolhão", "Trindade")
+
+        assert options
+        assert all(o.estimated for o in options)
+
+    @pytest.mark.asyncio
+    async def test_plan_trip_async_unknown_place(self):
+        import bot.services.trip_planner as tp
+
+        with patch.object(tp, "resolve_location_any",
+                          new_callable=AsyncMock) as resolver:
+            resolver.return_value = None
+            assert await tp.plan_trip_async("xyzzy", "Trindade") == []

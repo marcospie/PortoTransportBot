@@ -70,6 +70,9 @@ _QUERY_ALIASES = {
 _QUERY_STOPWORDS = {
     "station", "stations", "stop", "stops", "metro", "subway",
     "underground", "tube", "line", "platform",
+    # English filler words. Portuguese connectors (de/do/da) are left alone:
+    # they are part of the official names and the token scorer handles them.
+    "the", "an", "of", "and", "to",
 }
 
 _ALIAS_PHRASES = sorted(_QUERY_ALIASES, key=lambda p: (-len(p.split()), -len(p)))

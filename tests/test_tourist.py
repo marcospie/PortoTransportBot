@@ -124,6 +124,48 @@ class TestTouristService:
                     )
 
 
+    def test_ticket_info_prices_come_from_fares(self):
+        """No hardcoded prices: the guide renders bot.services.fares."""
+        from bot.services import fares
+        from bot.services.tourist import get_ticket_info
+        for lang in ("pt", "en"):
+            text = " ".join(s["text"] for s in get_ticket_info(lang)["sections"])
+            assert "1\\.40" in text                      # current Z2 fare
+            assert "1\\.25" not in text                  # old, wrong Z2 fare
+            assert "1\\.65" not in text                  # old, wrong Z3 fare
+            assert f"{fares.TOUR_PRICES[3]:.2f}".replace(".", "\\.") in text
+            assert "15\\.00" not in text                 # old Tour 3 price
+
+    def test_ticket_info_shows_real_zone_names(self):
+        """Users must be able to cross-check against station signage."""
+        from bot.services.tourist import get_ticket_info
+        for lang in ("pt", "en"):
+            text = " ".join(s["text"] for s in get_ticket_info(lang)["sections"])
+            assert "PRT1" in text
+            assert "VCD8" in text
+
+    def test_ticket_info_shows_verification_date(self):
+        from bot.services import fares
+        from bot.services.tourist import get_ticket_info
+        for lang in ("pt", "en"):
+            text = " ".join(s["text"] for s in get_ticket_info(lang)["sections"])
+            assert fares.LAST_VERIFIED.replace("-", "\\-") in text
+
+    def test_destination_zones_are_computed_not_typed(self):
+        from bot.services.tourist import TOURIST_POIS
+        from bot.services.zones import calculate_zones
+        beach = TOURIST_POIS["beaches"]["destinations"][0]
+        # Matosinhos (MTS1) is 3 zones from central Porto, not 4.
+        assert beach["zone"] == "Z3"
+        assert calculate_zones("Trindade", "Matosinhos Sul")["title"] == "Z3"
+
+    def test_gaia_cellars_are_z2(self):
+        """Porto -> Gaia riverside is officially a Z2 trip."""
+        from bot.services.tourist import TOURIST_POIS
+        for dest in TOURIST_POIS["wine_cellars"]["destinations"]:
+            assert dest["zone"] == "Z2"
+
+
 # ===================================================================
 # Tourist keyboard tests
 # ===================================================================

@@ -1,7 +1,36 @@
 """Service for Porto MetroBus (BRT - Bus Rapid Transit) data.
 
-Uses hardcoded planned/operating lines and frequency-based estimated departures,
-following the same patterns as the Metro service.
+Data provenance — read before trusting anything here
+----------------------------------------------------
+**There is no open dataset for the MetroBus.** Verified 2026-07-26: the Porto
+open data portal (CKAN ``package_search``) returns *zero* results for
+"metrobus", "brt" and "boavista", and its only two GTFS datasets are Metro do
+Porto and STCP — neither of which contains a MetroBus route.  So this module
+cannot be GTFS-derived the way :mod:`bot.services.metro` now is.
+
+What was corrected, and against what
+------------------------------------
+The previous table was not survey data: its coordinates climbed in uniform
+0.002-0.003 steps and ran *north-east* to 41.182,-8.675, whereas the real
+corridor runs *west* along Avenida da Boavista.  Praça do Império was ~3 km from
+its true position.  Coordinates for the stops that correspond to a place we
+could verify are now taken from real surveyed feeds:
+
+* ``PR. DO IMPÉRIO`` (41.155866, -8.671349) — STCP GTFS, stops PRI1/PRI4.
+* ``BOAVISTA-CASA DA MÚSICA`` (41.158950, -8.629420) — STCP GTFS, stop BCM1.
+* ``BOAVISTA (BOM SUCESSO)`` (41.155740, -8.628410) — STCP GTFS, stop BS10.
+* ``AV.DA BOAVISTA`` (41.162820, -8.663400) — STCP GTFS, stop ABVT1.
+* ``FONTE DA MOURA`` (41.164500, -8.662140) — STCP GTFS, stop FTM1.
+* ``FLUVIAL (NORTE)`` (41.152140, -8.655190) — STCP GTFS, stop FLUN1.
+* Francos / Viso — Metro do Porto GTFS stops 5711 / 5729.
+
+Stops flagged ``"verified": False`` keep their original approximate position
+because no authoritative source for them could be found. ``STOP_DATA_VERIFIED``
+and :func:`is_stop_data_verified` let callers say so rather than implying the
+list is official.
+
+A second MetroBus corridor is often mentioned in press coverage, but no stop
+list or dataset for it could be verified, so **no second line is invented here**.
 """
 
 import logging
@@ -10,33 +39,101 @@ from datetime import datetime, time, timedelta
 
 logger = logging.getLogger(__name__)
 
-# MetroBus lines — only Line 1 is currently operational
+# No official MetroBus dataset exists (see module docstring). Keep this False so
+# the UI can avoid presenting the stop list as published fact.
+STOP_DATA_VERIFIED = False
+STOP_DATA_SOURCE = (
+    "Percurso e terminais confirmados; posições das paragens aproximadas "
+    "(não existe dataset aberto do MetroBus)"
+)
+STOP_DATA_SOURCE_EN = (
+    "Route and termini confirmed; stop positions approximate "
+    "(no open MetroBus dataset exists)"
+)
+STOP_DATA_DATE = "2026-07-26"
+
+# MetroBus lines — only Line 1 is known to operate. Terminals verified:
+# "Casa da Música" (Metro do Porto GTFS) and "Praça do Império" (STCP GTFS
+# stop "PR. DO IMPÉRIO").
 METROBUS_LINES = {
     "1": {
         "name": "Linha 1 (Boavista)",
         "emoji": "\U0001f68d",  # bus emoji
         "route": "Casa da Música ↔ Império",
+        "route_full": "Casa da Música ↔ Praça do Império",
     },
 }
 
-# Complete list of MetroBus stops with line associations and coordinates
-# Line 1 (Boavista): Casa da Música → Império (Matosinhos)
+# MetroBus stops. ``verified`` records whether the coordinate came from a real
+# surveyed feed (see module docstring) or is still an approximation.
 STOPS: dict[str, dict] = {
-    "Casa da Música (MetroBus)": {"lines": ["1"], "zone": "PRT", "lat": 41.1585, "lon": -8.6305},
-    "Rotunda da Boavista": {"lines": ["1"], "zone": "PRT", "lat": 41.1578, "lon": -8.6260},
-    "Bom Sucesso": {"lines": ["1"], "zone": "PRT", "lat": 41.1592, "lon": -8.6350},
-    "Avenida da Boavista": {"lines": ["1"], "zone": "PRT", "lat": 41.1615, "lon": -8.6420},
-    "Fluvial": {"lines": ["1"], "zone": "PRT", "lat": 41.1640, "lon": -8.6490},
-    "Fonte da Moura": {"lines": ["1"], "zone": "PRT", "lat": 41.1665, "lon": -8.6530},
-    "Francos (MetroBus)": {"lines": ["1"], "zone": "PRT", "lat": 41.1690, "lon": -8.6570},
-    "Viso (MetroBus)": {"lines": ["1"], "zone": "PRT", "lat": 41.1720, "lon": -8.6600},
-    "Estádio do Bessa": {"lines": ["1"], "zone": "PRT", "lat": 41.1740, "lon": -8.6630},
-    "Norton de Matos": {"lines": ["1"], "zone": "MTS", "lat": 41.1760, "lon": -8.6660},
-    "Jardim de Matosinhos": {"lines": ["1"], "zone": "MTS", "lat": 41.1790, "lon": -8.6710},
-    "Império": {"lines": ["1"], "zone": "MTS", "lat": 41.1820, "lon": -8.6750},
+    "Casa da Música (MetroBus)": {"lines": ["1"], "zone": "PRT",
+                                  "lat": 41.158950, "lon": -8.629420,
+                                  "verified": True},
+    "Rotunda da Boavista": {"lines": ["1"], "zone": "PRT",
+                            "lat": 41.157400, "lon": -8.629500,
+                            "verified": False},
+    "Bom Sucesso": {"lines": ["1"], "zone": "PRT",
+                    "lat": 41.155740, "lon": -8.628410,
+                    "verified": True},
+    "Estádio do Bessa": {"lines": ["1"], "zone": "PRT",
+                         "lat": 41.162000, "lon": -8.645500,
+                         "verified": False},
+    "Avenida da Boavista": {"lines": ["1"], "zone": "PRT",
+                            "lat": 41.162820, "lon": -8.663400,
+                            "verified": True},
+    "Fonte da Moura": {"lines": ["1"], "zone": "PRT",
+                       "lat": 41.164500, "lon": -8.662140,
+                       "verified": True},
+    "Norton de Matos": {"lines": ["1"], "zone": "PRT",
+                        "lat": 41.160500, "lon": -8.667000,
+                        "verified": False},
+    "Fluvial": {"lines": ["1"], "zone": "PRT",
+                "lat": 41.152140, "lon": -8.655190,
+                "verified": True},
+    "Jardim de Matosinhos": {"lines": ["1"], "zone": "MTS",
+                             "lat": 41.157500, "lon": -8.669500,
+                             "verified": False},
+    # Praça do Império, Foz do Douro — inside Porto, not Matosinhos.
+    "Império": {"lines": ["1"], "zone": "PRT",
+                "lat": 41.155866, "lon": -8.671349,
+                "verified": True},
+    # Interchanges with the metro, north of the Boavista axis.
+    "Francos (MetroBus)": {"lines": ["1"], "zone": "PRT",
+                           "lat": 41.165550, "lon": -8.636347,
+                           "verified": True},
+    "Viso (MetroBus)": {"lines": ["1"], "zone": "PRT",
+                        "lat": 41.177250, "lon": -8.646498,
+                        "verified": True},
 }
 
-# Typical frequencies (minutes between departures)
+# Stop order along Line 1, east (Casa da Música / Boavista) to west (Praça do
+# Império). Explicit because dict-insertion order is not a travel order.
+LINE_STOP_ORDER: dict[str, list[str]] = {
+    "1": [
+        "Casa da Música (MetroBus)",
+        "Rotunda da Boavista",
+        "Bom Sucesso",
+        "Francos (MetroBus)",
+        "Viso (MetroBus)",
+        "Estádio do Bessa",
+        "Fonte da Moura",
+        "Avenida da Boavista",
+        "Norton de Matos",
+        "Jardim de Matosinhos",
+        "Fluvial",
+        "Império",
+    ],
+}
+
+
+def is_stop_data_verified() -> bool:
+    """False — the MetroBus stop list has no authoritative open source."""
+    return STOP_DATA_VERIFIED
+
+
+# Typical frequencies (minutes between departures). APPROXIMATE: no MetroBus
+# timetable is published in machine-readable form.
 FREQUENCIES = {
     "peak": {"1": 5},
     "off_peak": {"1": 10},
@@ -222,12 +319,16 @@ def get_all_lines() -> list[dict]:
 
 
 def get_line_stops(line_id: str) -> list[str]:
-    """Get all stops for a specific MetroBus line, in order."""
-    line_stops = []
-    for name, data in STOPS.items():
-        if line_id in data["lines"]:
-            line_stops.append(name)
-    return line_stops
+    """Get all stops for a specific MetroBus line, in travel order.
+
+    Uses the explicit ``LINE_STOP_ORDER`` sequence; falling back to
+    dict-insertion order (the old behaviour) produced a stop list that was not
+    a travel order, so the rendered line map made no sense.
+    """
+    ordered = LINE_STOP_ORDER.get(line_id)
+    if ordered:
+        return [name for name in ordered if name in STOPS]
+    return [name for name, data in STOPS.items() if line_id in data["lines"]]
 
 
 def get_frequency_info(line_code: str) -> dict:
