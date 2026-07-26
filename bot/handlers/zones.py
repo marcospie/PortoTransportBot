@@ -405,7 +405,7 @@ def _format_zone_result(result: dict, lang: str) -> str:
     zones_needed = result.get("zones_needed")
     if zones_needed == 1:
         text += "\n" + t("zones_tip_same", lang)
-    elif zones_needed and zones_needed >= 3:
+    elif zones_needed and zones_needed >= 3 and day_pass is not None:
         text += "\n" + t("zones_tip_day_pass", lang)
 
     origin_lower = result["origin_name"].lower()

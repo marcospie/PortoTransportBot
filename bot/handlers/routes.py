@@ -12,20 +12,13 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from bot.services import stcp
-from bot.services.metro import (
-    STATIONS, get_line_stations, get_station_coordinates,
-    get_next_departures, METRO_LINES, search_stations,
-)
 from bot.services.trip_planner import (
-    plan_trip, plan_trip_from_coords, plan_trip_from_coords_async,
-    resolve_location, resolve_location_any, TripOption, TripStep,
+    plan_trip_from_coords_async, resolve_location, TripOption,
 )
 from bot.keyboards.inline import trip_results_keyboard, trip_detail_keyboard
 from bot.utils.formatting import escape_md
 from bot.utils.i18n import get_lang, t
 from bot.utils.telegram import safe_edit_message
-from bot.config import METRO_LINES as METRO_LINES_CONFIG
 
 logger = logging.getLogger(__name__)
 

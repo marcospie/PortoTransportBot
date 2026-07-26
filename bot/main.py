@@ -489,7 +489,7 @@ def register_handlers(app) -> None:
 
     # Settings callbacks
     app.add_handler(CallbackQueryHandler(settings.settings_menu_callback, pattern=r"^menu:settings$"))
-    app.add_handler(CallbackQueryHandler(settings.settings_option_callback, pattern=r"^settings:(metro_radius|bus_radius|max_results|language)$"))
+    app.add_handler(CallbackQueryHandler(settings.settings_option_callback, pattern=r"^settings:(metro_radius|bus_radius|max_results|language|notifications)$"))
     app.add_handler(CallbackQueryHandler(settings.settings_set_callback, pattern=r"^settings:set:.+$"))
     app.add_handler(CallbackQueryHandler(settings.settings_reset_callback, pattern=r"^settings:reset$"))
 

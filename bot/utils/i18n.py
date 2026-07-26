@@ -411,7 +411,9 @@ TRANSLATIONS = {
         "zones_tip_same": "💡 *Dica:* Viagem dentro da mesma zona\\! O bilhete mais barato é suficiente\\.",
         "zones_tip_day_pass": "💡 *Dica:* Se fizeres 3\\+ viagens, o passe diário compensa\\!",
         "zones_tip_airport": "💡 *Dica:* Para o aeroporto, precisas de um bilhete Z4\\. Compra na máquina Andante no aeroporto\\.",
-        "zones_tip_tour": "💡 *Dica:* Para turistas, o Andante Tour \\(3 dias, 15\\.00€\\) cobre todas as zonas\\!",
+        # Price mirrors bot.services.fares.ANDANTE_TOUR_3_PRICE, which is the
+        # authority; format from there rather than editing this literal.
+        "zones_tip_tour": "💡 *Dica:* Para turistas, o Andante Tour \\(3 dias, 16\\.55€\\) cobre todas as zonas\\!",
         "zones_not_found": "❌ Estação *{name}* não encontrada\\. Tenta outro nome\\.",
         "zones_map_title": (
             "🗺 *Mapa de Zonas Andante*\n"
@@ -951,7 +953,7 @@ TRANSLATIONS = {
         "zones_tip_same": "💡 *Tip:* Travel within the same zone\\! The cheapest ticket is enough\\.",
         "zones_tip_day_pass": "💡 *Tip:* If you make 3\\+ trips, the day pass is worth it\\!",
         "zones_tip_airport": "💡 *Tip:* For the airport, you need a Z4 ticket\\. Buy it at the Andante machine at the airport\\.",
-        "zones_tip_tour": "💡 *Tip:* For tourists, the Andante Tour \\(3 days, 15\\.00€\\) covers all zones\\!",
+        "zones_tip_tour": "💡 *Tip:* For tourists, the Andante Tour \\(3 days, 16\\.55€\\) covers all zones\\!",
         "zones_not_found": "❌ Station *{name}* not found\\. Try another name\\.",
         "zones_map_title": (
             "🗺 *Andante Zone Map*\n"

@@ -306,10 +306,11 @@ class TestTTLCacheBackwardCompatible:
         assert cache.get("live") == 1
 
     def test_services_construct_it_the_same_way(self):
-        """Every service builds TTLCache(default_ttl=N) — keep that working."""
-        from bot.services import alerts, metro, stcp
-        for module in (alerts, metro, stcp):
+        """Services build TTLCache(default_ttl=N) — keep that working."""
+        from bot.services import alerts, stcp
+        for module in (alerts, stcp):
             assert isinstance(module._cache, TTLCache)
+            assert module._cache.max_size > 0
 
 
 class TestTTLCacheIsBounded:

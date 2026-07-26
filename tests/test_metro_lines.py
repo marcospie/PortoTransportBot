@@ -722,11 +722,55 @@ class TestGtfsDerivation:
 
         metro._derive_network_from_gtfs()
 
-        # Bexp folded into B
-        assert metro._derived_station_lines["Trindade"] == ["B"]
-        assert STATIONS["Trindade"]["lines"] == ["B"]
+        # Bexp is folded into B, and B is present for both stations.
+        assert "B" in metro._derived_station_lines["Trindade"]
+        assert "B" in STATIONS["Trindade"]["lines"]
+        # Order comes straight from stop_sequence.
         assert metro._derived_line_order["B"] == ["Trindade", "Bolhão"]
         assert get_line_stations("B") == ["Trindade", "Bolhão"]
+
+    def test_partial_feed_never_removes_a_line(self):
+        """A feed missing a line must not drop it — that hides a direction.
+
+        Regression guard for the reported bug class: losing a line association
+        makes the station show departures in only one direction.
+        """
+        before = set(STATIONS["Trindade"]["lines"])
+        assert {"A", "D"} <= before
+
+        # Feed that only knows about Line B at Trindade.
+        metro._gtfs_stops = {"1": {"name": "Trindade", "lat": 41.15228,
+                                   "lon": -8.609299}}
+        metro._gtfs_trips = {"t1": {"route_id": "B", "service_id": "S",
+                                    "headsign": "X", "direction_id": "0"}}
+        metro._gtfs_stop_times = {"1": [{"trip_id": "t1", "time": "10:00:00",
+                                         "secs": 36000}]}
+        metro._gtfs_trip_stops = {"t1": ["1"]}
+        metro._gtfs_calendar = {"S": {d: True for d in metro._DOW_NAMES}}
+
+        metro._derive_network_from_gtfs()
+
+        after = set(STATIONS["Trindade"]["lines"])
+        assert before <= after, (
+            f"derivation removed line(s) {sorted(before - after)} from Trindade"
+        )
+
+    def test_feed_can_add_a_new_line_to_a_station(self):
+        before = set(STATIONS["Aeroporto"]["lines"])
+        assert "B" not in before
+
+        metro._gtfs_stops = {"1": {"name": "Aeroporto", "lat": 41.23708,
+                                   "lon": -8.669442}}
+        metro._gtfs_trips = {"t1": {"route_id": "B", "service_id": "S",
+                                    "headsign": "X", "direction_id": "0"}}
+        metro._gtfs_stop_times = {"1": [{"trip_id": "t1", "time": "10:00:00",
+                                         "secs": 36000}]}
+        metro._gtfs_trip_stops = {"t1": ["1"]}
+        metro._gtfs_calendar = {"S": {d: True for d in metro._DOW_NAMES}}
+
+        metro._derive_network_from_gtfs()
+
+        assert "B" in STATIONS["Aeroporto"]["lines"]
 
     def test_derivation_is_noop_without_feed(self):
         metro._gtfs_stops = {}

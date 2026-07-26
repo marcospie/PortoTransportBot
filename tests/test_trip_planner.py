@@ -461,7 +461,8 @@ class TestDirectionGuessing:
         # Line A: Senhor de Matosinhos ↔ Estádio do Dragão. Heading east.
         direction = _direction_towards(
             "Senhor de Matosinhos ↔ Estádio do Dragão", "metro",
-            41.1618, -8.5836)  # Estádio do Dragão
+            41.1585, -8.6305,   # Casa da Música
+            41.1618, -8.5836)   # Estádio do Dragão
         assert "Dragão" in direction
 
     def test_direction_towards_matosinhos(self):
@@ -469,7 +470,8 @@ class TestDirectionGuessing:
         # Same line, opposite way: the old code could never produce this.
         direction = _direction_towards(
             "Senhor de Matosinhos ↔ Estádio do Dragão", "metro",
-            41.1826, -8.6873)  # Senhor de Matosinhos
+            41.1618, -8.5836,   # Estádio do Dragão
+            41.1585, -8.6305)   # Casa da Música
         assert "Matosinhos" in direction
 
     def test_direct_metro_step_direction_depends_on_destination(self):
@@ -515,10 +517,13 @@ class TestLegLimitsRemoved:
 
     def test_graph_allows_more_than_one_transfer(self):
         from bot.services.trip_planner import _plan_graph, MAX_GRAPH_TRANSFERS
-        # Airport (line E) to Hospital Santos Silva (line D, far south)
-        options = _plan_graph(41.2350, -8.6780, 41.0930, -8.6060, max_options=5)
+        # Aeroporto (line E) to Hospital Santos Silva (line D, far south):
+        # more than one interchange is unavoidable.
+        options = _plan_graph(41.23708, -8.669442, 41.10576, -8.591075,
+                              max_options=5)
         assert options
         assert all(o.transfers <= MAX_GRAPH_TRANSFERS for o in options)
+        assert any(o.transfers >= 1 for o in options)
 
     def test_graph_can_mix_modes(self):
         from bot.services.trip_planner import _plan_graph

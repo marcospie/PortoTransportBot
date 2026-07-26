@@ -8,7 +8,6 @@ from telegram.ext import ContextTypes
 from bot.keyboards.inline import (
     metrobus_menu_keyboard,
     metrobus_lines_keyboard,
-    metrobus_stop_results_keyboard,
     metrobus_stop_actions_keyboard,
 )
 from bot.services import metrobus

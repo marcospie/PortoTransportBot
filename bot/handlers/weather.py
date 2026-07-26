@@ -9,7 +9,7 @@ from bot.keyboards.inline import weather_keyboard
 from bot.services.weather import get_weather_info, get_transport_tip
 from bot.utils.formatting import escape_md
 from bot.utils.i18n import get_lang, t
-from bot.utils.telegram import safe_edit_message
+from bot.utils.telegram import safe_edit_message, t_safe
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,9 @@ async def _format_weather_message(lang: str = "pt") -> str:
     sunrise_label = t("weather_sunrise", lang)
     sunset_label = t("weather_sunset", lang)
     tip_label = t("weather_tip", lang)
+    wind_label = t_safe("weather_wind", lang, pt="Vento", en="Wind")
+    humidity_label = t_safe("weather_humidity", lang,
+                            pt="Humidade", en="Humidity")
 
     description = info["description_pt"] if lang == "pt" else info["description_en"]
     tip = get_transport_tip(lang)
@@ -39,8 +42,8 @@ async def _format_weather_message(lang: str = "pt") -> str:
         f"\U0001f321\ufe0f {escape_md(temp_label)}: *{info['temp_now']}\u00b0C* "
         f"\\({info['temp_min']}\u00b0C \\- {info['temp_max']}\u00b0C\\)\n"
         f"\U0001f327\ufe0f {escape_md(rain_label)}: *{info['rain_prob']}%*\n"
-        f"\U0001f4a8 {escape_md('Vento' if lang == 'pt' else 'Wind')}: *{info['wind']} km/h*\n"
-        f"\U0001f4a7 {escape_md('Humidade' if lang == 'pt' else 'Humidity')}: *{info['humidity']}%*\n"
+        f"\U0001f4a8 {escape_md(wind_label)}: *{info['wind']} km/h*\n"
+        f"\U0001f4a7 {escape_md(humidity_label)}: *{info['humidity']}%*\n"
         f"\U0001f305 {escape_md(sunrise_label)}: *{escape_md(info['sunrise'])}*\n"
         f"\U0001f307 {escape_md(sunset_label)}: *{escape_md(info['sunset'])}*\n\n"
         f"\U0001f4a1 {escape_md(tip_label)}: {escape_md(tip)}"

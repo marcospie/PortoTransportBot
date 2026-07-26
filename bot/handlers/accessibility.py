@@ -94,10 +94,12 @@ def _provenance_line(data: dict, lang: str, notes: str = "") -> str:
 
     label = t_safe("accessibility_data_source", lang,
                    pt="Fonte", en="Source")
-    text = f"📄 _{escape_md(label)}: {escape_md(str(source))}"
+    parts = f"{label}: {source}"
     if date:
-        text += f" \\· {escape_md(str(date))}"
-    return text + "_"
+        parts += f" · {date}"
+    # escape_md handles MarkdownV2 reserved characters; never hand-escape here
+    # (escaping a non-reserved char is itself a parse error).
+    return f"📄 _{escape_md(parts)}_"
 
 
 def _format_station_info(data: dict, lang: str) -> str:

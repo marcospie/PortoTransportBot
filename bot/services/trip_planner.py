@@ -34,18 +34,15 @@ import httpx
 from bot.services.metro import (
     STATIONS as METRO_STATIONS,
     search_stations as metro_search,
-    get_nearby_stations as metro_nearby,
 )
 from bot.services.cp import (
     STATIONS as CP_STATIONS,
     search_stations as cp_search,
-    get_nearby_stations as cp_nearby,
     CP_LINES,
 )
 from bot.services.metrobus import (
     STOPS as METROBUS_STOPS,
     search_stops as metrobus_search,
-    get_nearby_stops as metrobus_nearby,
     METROBUS_LINES,
 )
 from bot.config import METRO_LINES
@@ -570,6 +567,7 @@ def _build_direct_metro(origin_node: dict, dest_node: dict,
                               duration_min=walk_origin_min))
 
     direction = _direction_towards(_get_line_route("metro", line_code), "metro",
+                                   origin_node["lat"], origin_node["lon"],
                                    dest_node["lat"], dest_node["lon"])
 
     steps.append(TripStep(
@@ -628,6 +626,7 @@ def _build_metro_with_transfer(origin_node: dict, dest_node: dict,
         line=_get_line_name("metro", line1_code),
         duration_min=ride1,
         direction=_direction_towards(_get_line_route("metro", line1_code), "metro",
+                                     origin_node["lat"], origin_node["lon"],
                                      transfer_data["lat"], transfer_data["lon"]),
     ))
 
@@ -638,6 +637,7 @@ def _build_metro_with_transfer(origin_node: dict, dest_node: dict,
         line=_get_line_name("metro", line2_code),
         duration_min=ride2,
         direction=_direction_towards(_get_line_route("metro", line2_code), "metro",
+                                     transfer_data["lat"], transfer_data["lon"],
                                      dest_node["lat"], dest_node["lon"]),
     ))
 
@@ -683,6 +683,7 @@ def _build_direct_train(origin_node: dict, dest_node: dict,
         line=line_name,
         duration_min=ride_min,
         direction=_direction_towards(_get_line_route("train", line_id), "train",
+                                     origin_node["lat"], origin_node["lon"],
                                      dest_node["lat"], dest_node["lon"]),
     ))
 
@@ -727,6 +728,7 @@ def _build_direct_metrobus(origin_node: dict, dest_node: dict,
         line=line_name,
         duration_min=ride_min,
         direction=_direction_towards(_get_line_route("metrobus", line_code), "metrobus",
+                                     origin_node["lat"], origin_node["lon"],
                                      dest_node["lat"], dest_node["lon"]),
     ))
 
@@ -890,6 +892,7 @@ def _plan_graph(origin_lat: float, origin_lon: float,
                     duration_min=ride,
                     direction=_direction_towards(
                         _get_line_route(node["type"], line), node["type"],
+                        node["lat"], node["lon"],
                         target["lat"], target["lon"]),
                 ))
                 counter += 1

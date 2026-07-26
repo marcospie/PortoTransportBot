@@ -20,7 +20,7 @@ from bot.services.events import (
 )
 from bot.utils.formatting import escape_md
 from bot.utils.i18n import get_lang, t
-from bot.utils.telegram import safe_edit_message
+from bot.utils.telegram import safe_edit_message, t_safe
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,13 @@ async def events_category_callback(update: Update, context: ContextTypes.DEFAULT
 
     if category_key == "all":
         events_list = get_events()
-        cat_info = {"name_pt": "Todos os Eventos", "name_en": "All Events", "emoji": "📋"}
+        cat_info = {
+            "name_pt": t_safe("events_category_all", "pt",
+                              pt="Todos os Eventos"),
+            "name_en": t_safe("events_category_all", "en",
+                              en="All Events"),
+            "emoji": "📋",
+        }
     else:
         events_list = get_events(category_key)
         cat_info = EVENT_CATEGORIES.get(category_key)

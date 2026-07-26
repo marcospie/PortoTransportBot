@@ -6,7 +6,10 @@
 # no filters.StatusUpdate.USER_SHARED, no Defaults(disable_web_page_preview=/quote=),
 # no *_proxy_url, no *_timeout arguments to run_polling(), no Passport types and
 # no media-sending calls affected by the write_timeout default change.
-python-telegram-bot==22.8
+# The [job-queue] extra is required, not optional: without it
+# Application.job_queue is None, which silently disables the daily GTFS
+# refresh (bot/main.py) and proactive notifications entirely.
+python-telegram-bot[job-queue]==22.8
 
 # STCP real-time arrivals API client.
 stcp-api==2.0.3

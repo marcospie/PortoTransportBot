@@ -5,7 +5,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.keyboards.inline import alerts_keyboard, main_menu_keyboard
+from bot.keyboards.inline import alerts_keyboard
 from bot.services.alerts import (
     SEVERITY_HIGH,
     SEVERITY_MEDIUM,

@@ -595,10 +595,28 @@ def _derive_network_from_gtfs() -> None:
         logger.warning("GTFS feed has %d station(s) unknown to the bot: %s",
                        len(unknown), ", ".join(unknown))
 
+    # Union with the snapshot rather than replacing it. Both are GTFS-derived,
+    # so for a healthy feed the result is identical — but a feed that is
+    # partial (engineering works, a truncated import) must never be able to
+    # *remove* a line from a station: that is exactly what makes the bot show
+    # only one direction, the bug users reported.
     for name, codes in station_lines.items():
-        if name in STATIONS:
-            _derived_station_lines[name] = sorted(codes)
-            STATIONS[name]["lines"] = sorted(codes)
+        if name not in STATIONS:
+            continue
+        existing = set(STATIONS[name]["lines"])
+        added = codes - existing
+        dropped = existing - codes
+        if dropped:
+            logger.warning(
+                "GTFS feed has no %s service at %s; keeping it from the "
+                "offline snapshot so both directions stay visible",
+                "/".join(sorted(dropped)), name)
+        if added:
+            logger.info("GTFS feed adds line(s) %s at %s",
+                        "/".join(sorted(added)), name)
+        merged = sorted(existing | codes)
+        _derived_station_lines[name] = merged
+        STATIONS[name]["lines"] = merged
 
     # --- per-line station order ------------------------------------------
     # Use the longest trip per line as the canonical stop sequence; branching
